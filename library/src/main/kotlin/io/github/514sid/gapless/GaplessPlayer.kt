@@ -1,4 +1,4 @@
-package com._514sid.gapless
+package io.github.514sid.gapless
 
 import android.annotation.SuppressLint
 import android.util.Log
@@ -27,7 +27,7 @@ import androidx.media3.common.VideoSize
 import androidx.media3.exoplayer.ExoPlayer
 import coil3.compose.AsyncImage
 import coil3.request.ImageRequest
-import com._514sid.gapless.internal.GaplessViewModel
+import io.github.514sid.gapless.internal.GaplessViewModel
 import java.io.File
 
 private const val TAG = "GaplessPlayer"

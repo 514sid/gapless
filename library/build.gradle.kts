@@ -6,7 +6,7 @@ plugins {
 }
 
 android {
-    namespace = "com._514sid.gapless"
+    namespace = "io.github.514sid.gapless"
     compileSdk = libs.versions.compileSdk.get().toInt()
 
     defaultConfig {

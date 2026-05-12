@@ -1,4 +1,4 @@
-package com._514sid.gapless
+package io.github.514sid.gapless
 
 import java.time.LocalDate
 import java.time.LocalTime
