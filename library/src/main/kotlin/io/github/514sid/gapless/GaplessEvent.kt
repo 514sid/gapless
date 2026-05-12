@@ -1,4 +1,4 @@
-package io.github.514sid.gapless
+package io.github._514sid.gapless
 
 sealed class GaplessEvent {
     /** Fired whenever a new asset starts playing (deduplicated — won't fire again for the same asset). */

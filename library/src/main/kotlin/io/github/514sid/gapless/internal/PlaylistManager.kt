@@ -1,6 +1,6 @@
-package io.github.514sid.gapless.internal
+package io.github._514sid.gapless.internal
 
-import io.github.514sid.gapless.GaplessAsset
+import io.github._514sid.gapless.GaplessAsset
 
 internal object PlaylistManager {
     /**

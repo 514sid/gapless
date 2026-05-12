@@ -1,4 +1,4 @@
-package io.github.514sid.gapless
+package io.github._514sid.gapless
 
 /**
  * Runtime configuration for [GaplessPlayer].
