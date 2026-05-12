@@ -42,7 +42,6 @@ dependencies {
     implementation(libs.androidx.compose.ui.graphics)
     implementation(libs.androidx.compose.foundation)
     implementation(libs.androidx.lifecycle.viewmodel.compose)
-    implementation(libs.androidx.lifecycle.runtime.compose)
     implementation(libs.androidx.media3.exoplayer)
     implementation(libs.coil.compose)
     implementation(libs.coil.network.okhttp)

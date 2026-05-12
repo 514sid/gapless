@@ -19,10 +19,6 @@ import androidx.compose.ui.layout.Constraints
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.zIndex
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.LifecycleEventObserver
-import androidx.lifecycle.compose.LocalLifecycleOwner
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackException
@@ -107,18 +103,9 @@ fun GaplessPlayer(
         viewModel.events.collect { currentOnEvent(it) }
     }
 
-    val lifecycleOwner = LocalLifecycleOwner.current
-    val lifecycleState by lifecycleOwner.lifecycle.currentStateFlow.collectAsStateWithLifecycle()
-    val isAppVisible = lifecycleState.isAtLeast(Lifecycle.State.STARTED)
-
-    if (!isAppVisible) {
-        Box(modifier = Modifier.fillMaxSize().background(Color.Black))
-        return
-    }
-
-    val currentAsset by viewModel.currentAsset.collectAsStateWithLifecycle()
-    val preloadAsset by viewModel.preloadAsset.collectAsStateWithLifecycle()
-    val isInitialized by viewModel.isInitialized.collectAsStateWithLifecycle()
+    val currentAsset by viewModel.currentAsset.collectAsState()
+    val preloadAsset by viewModel.preloadAsset.collectAsState()
+    val isInitialized by viewModel.isInitialized.collectAsState()
 
     // Two fixed render slots — assets are sticky so ExoPlayer/WebView instances survive
     // across advances and the next asset is already buffered when it becomes active.
@@ -202,7 +189,6 @@ private fun MediaSlot(
     onError: (GaplessAsset, String) -> Unit,
 ) {
     val context = LocalContext.current
-    val lifecycleOwner = LocalLifecycleOwner.current
 
     val isVisible = isActive
     val isVideo = asset?.isVideo == true
@@ -231,24 +217,8 @@ private fun MediaSlot(
         exoPlayer.setVideoTextureView(textureView)
     }
 
-    // Lifecycle: pause / resume renderers with the host Activity.
     DisposableEffect(Unit) {
-        val observer = LifecycleEventObserver { _, event ->
-            when (event) {
-                Lifecycle.Event.ON_PAUSE -> {
-                    exoPlayer.pause()
-                    webView.onPause()
-                }
-                Lifecycle.Event.ON_RESUME -> {
-                    if (isVisible) exoPlayer.play()
-                    if (isVisible && isWeb) webView.onResume()
-                }
-                else -> {}
-            }
-        }
-        lifecycleOwner.lifecycle.addObserver(observer)
         onDispose {
-            lifecycleOwner.lifecycle.removeObserver(observer)
             exoPlayer.release()
             webView.destroy()
         }
