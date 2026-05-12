@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest>
+    <!--
+        INTERNET is needed for web assets (WebView) and remote image / video URLs.
+        This permission is automatically merged into the consuming app's manifest.
+    -->
+    <uses-permission android:name="android.permission.INTERNET" />
+</manifest>
