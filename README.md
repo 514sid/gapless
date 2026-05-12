@@ -12,6 +12,7 @@ A self-contained gapless media player Composable for Android. It seamlessly tran
 - **Smart Scheduling**: Assets can be scheduled by date range, specific days of the week, and daily time windows (including midnight-crossing ranges).
 - **Responsive Layout**: Built-in support for content rotation (0, 90, 180, 270 degrees) without affecting the Composable's layout bounds.
 - **Shuffle Mode**: Intelligent randomization that ensures the last item played doesn't immediately repeat on a new cycle.
+- **Customizable Empty State**: Provide your own Composable to display when no assets are active or available.
 
 ## Installation
 
@@ -45,6 +46,11 @@ GaplessPlayer(
     assets = assets,
     rotation = 90, // Landscape content on portrait screen
     shuffle = true,
+    emptyState = {
+        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            Text("Nothing to play right now", color = Color.White)
+        }
+    },
     onEvent = { event ->
         when (event) {
             is GaplessEvent.NowPlaying -> println("Playing: ${event.asset.id}")

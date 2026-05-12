@@ -4,7 +4,7 @@
 Gapless is an Android library providing a Jetpack Compose `GaplessPlayer` for seamless media playback. It eliminates black frames between assets by pre-buffering the next item in a hidden render slot.
 
 ## Core API
-- **Composable**: `GaplessPlayer(assets: List<GaplessAsset>, rotation: Int, shuffle: Boolean, config: GaplessPlayerConfig, onEvent: (GaplessEvent) -> Unit)`
+- **Composable**: `GaplessPlayer(assets: List<GaplessAsset>, rotation: Int, shuffle: Boolean, config: GaplessPlayerConfig, onEvent: (GaplessEvent) -> Unit, emptyState: @Composable () -> Unit)`
 - **Data Model**: `GaplessAsset` (id, uri, mimeType, durationMs, schedule fields)
 - **Events**: `GaplessEvent` (NowPlaying, Preloading, PlaybackError, PlaylistEmpty)
 - **Config**: `GaplessPlayerConfig` (tickIntervalMs, preloadThresholdMs)
@@ -26,3 +26,4 @@ Gapless is an Android library providing a Jetpack Compose `GaplessPlayer` for se
 - **Asset Stability**: `GaplessAsset.id` must be stable across list updates to prevent unnecessary renderer re-creations.
 - **Rotation**: Handled via `graphicsLayer` and custom `Layout` constraints; doesn't trigger Activity-level config changes.
 - **Error Recovery**: `PlaybackError` triggers an automatic skip to the next valid asset.
+- **Empty State**: Use the `emptyState` parameter to show custom UI when no assets are active.

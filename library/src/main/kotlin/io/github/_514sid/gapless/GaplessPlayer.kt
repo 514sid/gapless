@@ -73,16 +73,17 @@ private const val TAG = "GaplessPlayer"
  * )
  * ```
  *
- * @param assets   Ordered list of assets to play. Passing a new list hot-swaps the playlist
- *                 while preserving the currently-playing asset when possible.
- * @param rotation Screen rotation in degrees — `0`, `90`, `180`, or `270`. Content is rotated
- *                 inside its bounds; the composable's own layout size is unaffected.
- * @param shuffle  When `true` the playlist is randomized each pass, ensuring the last-played
- *                 asset does not appear first in the reshuffled order.
- * @param config   Timing configuration — tick interval and preload threshold. See [GaplessPlayerConfig].
- * @param onEvent  Invoked on the main thread for each [GaplessEvent]:
- *                 [GaplessEvent.NowPlaying], [GaplessEvent.Preloading],
- *                 [GaplessEvent.PlaybackError], [GaplessEvent.PlaylistEmpty].
+ * @param assets     Ordered list of assets to play. Passing a new list hot-swaps the playlist
+ *                   while preserving the currently-playing asset when possible.
+ * @param rotation   Screen rotation in degrees — `0`, `90`, `180`, or `270`. Content is rotated
+ *                   inside its bounds; the composable's own layout size is unaffected.
+ * @param shuffle    When `true` the playlist is randomized each pass, ensuring the last-played
+ *                   asset does not appear first in the reshuffled order.
+ * @param config     Timing configuration — tick interval and preload threshold. See [GaplessPlayerConfig].
+ * @param onEvent    Invoked on the main thread for each [GaplessEvent]:
+ *                   [GaplessEvent.NowPlaying], [GaplessEvent.Preloading],
+ *                   [GaplessEvent.PlaybackError], [GaplessEvent.PlaylistEmpty].
+ * @param emptyState Composable to show when there are no valid assets to play.
  */
 @Composable
 fun GaplessPlayer(
@@ -91,6 +92,7 @@ fun GaplessPlayer(
     shuffle: Boolean = false,
     config: GaplessPlayerConfig = GaplessPlayerConfig(),
     onEvent: (GaplessEvent) -> Unit = {},
+    emptyState: @Composable () -> Unit = { Box(modifier = Modifier.fillMaxSize().background(Color.Black)) }
 ) {
     val viewModel: GaplessViewModel = viewModel()
 
@@ -135,7 +137,7 @@ fun GaplessPlayer(
 
     RotatedScreenContainer(rotation) {
         if (currentAsset == null && preloadAsset == null) {
-            Box(modifier = Modifier.fillMaxSize().background(Color.Black))
+            emptyState()
         } else {
             for (i in 0..1) {
                 MediaSlot(
