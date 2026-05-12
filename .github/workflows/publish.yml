@@ -40,12 +40,28 @@ jobs:
         env:
           GITHUB_ACTOR: ${{ github.actor }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Publish to Maven Central (OSSRH)
-        if: ${{ github.event_name == 'release' || github.event.inputs.target == 'ossrh' }}
-        run: ./gradlew :library:publishReleasePublicationToOSSRHRepository
-        env:
-          OSSRH_USERNAME:       ${{ secrets.OSSRH_TOKEN_KEY }}
-          OSSRH_PASSWORD:       ${{ secrets.OSSRH_TOKEN_PASSWORD }}
-          GPG_SIGNING_KEY:      ${{ secrets.GPG_SIGNING_KEY }}
+          GPG_SIGNING_KEY: ${{ secrets.GPG_SIGNING_KEY }}
           GPG_SIGNING_PASSWORD: ${{ secrets.GPG_SIGNING_PASSWORD }}
+
+      - name: Generate Local Staging Bundle (For Sonatype)
+        if: ${{ github.event_name == 'release' || github.event.inputs.target == 'ossrh' }}
+        run: ./gradlew :library:publishReleasePublicationToCentralPortalBundleRepository
+        env:
+          GPG_SIGNING_KEY: ${{ secrets.GPG_SIGNING_KEY }}
+          GPG_SIGNING_PASSWORD: ${{ secrets.GPG_SIGNING_PASSWORD }}
+
+      - name: Zip and Upload to Sonatype Central Portal
+        if: ${{ github.event_name == 'release' || github.event.inputs.target == 'ossrh' }}
+        run: |
+          # 1. Navigate to the local repository directory and zip the files
+          cd library/build/central-bundle
+          zip -r ../central-bundle.zip .
+          cd ../../..
+          
+          # 2. Push the zip file directly to the new Central Portal API
+          echo "Uploading bundle to Maven Central Portal..."
+          curl --request POST \
+            --url "https://central.sonatype.com/api/v1/publisher/upload?publishingType=AUTOMATIC" \
+            --user "${{ secrets.OSSRH_TOKEN_KEY }}:${{ secrets.OSSRH_TOKEN_PASSWORD }}" \
+            --header "Accept: application/json" \
+            --form "bundle=@library/build/central-bundle.zip"
