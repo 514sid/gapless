@@ -1,4 +1,4 @@
-package com.514sid.gapless
+package com._514sid.gapless
 
 import android.annotation.SuppressLint
 import android.util.Log
@@ -27,7 +27,7 @@ import androidx.media3.common.VideoSize
 import androidx.media3.exoplayer.ExoPlayer
 import coil3.compose.AsyncImage
 import coil3.request.ImageRequest
-import com.514sid.gapless.internal.GaplessViewModel
+import com._514sid.gapless.internal.GaplessViewModel
 import java.io.File
 
 private const val TAG = "GaplessPlayer"
@@ -39,8 +39,8 @@ private const val TAG = "GaplessPlayer"
  * before the current one finishes, producing seamless black-frame-free transitions.
  *
  * **Supported content types** (resolved from [GaplessAsset.mimeType]):
- * - **Video** — `video/*`, HLS, DASH, RTSP — rendered via ExoPlayer (muted by default).
- * - **Image** — `image/*` — loaded via Coil.
+ * - **Video** — `video/x`, HLS, DASH, RTSP — rendered via ExoPlayer (muted by default).
+ * - **Image** — `image/x` — loaded via Coil.
  * - **Web**   — anything else — rendered via [android.webkit.WebView] with JS enabled.
  *
  * **Scheduling** — each asset can carry optional date-range, day-of-week, and time-window
@@ -77,7 +77,7 @@ private const val TAG = "GaplessPlayer"
  *                 while preserving the currently-playing asset when possible.
  * @param rotation Screen rotation in degrees — `0`, `90`, `180`, or `270`. Content is rotated
  *                 inside its bounds; the composable's own layout size is unaffected.
- * @param shuffle  When `true` the playlist is randomised each pass, ensuring the last-played
+ * @param shuffle  When `true` the playlist is randomized each pass, ensuring the last-played
  *                 asset does not appear first in the reshuffled order.
  * @param config   Timing configuration — tick interval and preload threshold. See [GaplessPlayerConfig].
  * @param onEvent  Invoked on the main thread for each [GaplessEvent]:
@@ -190,7 +190,6 @@ private fun MediaSlot(
 ) {
     val context = LocalContext.current
 
-    val isVisible = isActive
     val isVideo = asset?.isVideo == true
     val isImage = asset?.isImage == true
     val isWeb = asset?.isWeb == true
@@ -249,8 +248,8 @@ private fun MediaSlot(
     }
 
     // Play / pause in response to the active-slot flag.
-    LaunchedEffect(isVisible, asset?.id) {
-        if (isVisible) {
+    LaunchedEffect(isActive, asset?.id) {
+        if (isActive) {
             if (isVideo) { exoPlayer.seekTo(0); exoPlayer.play() }
             if (isWeb) webView.onResume()
         } else {
@@ -293,8 +292,8 @@ private fun MediaSlot(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .graphicsLayer { alpha = if (isVisible) 1f else 0f }
-            .zIndex(if (isVisible) 1f else 0f),
+            .graphicsLayer { alpha = if (isActive) 1f else 0f }
+            .zIndex(if (isActive) 1f else 0f),
         contentAlignment = Alignment.Center,
     ) {
         val videoModifier = (videoRatio?.let { Modifier.then(Modifier) } ?: Modifier.fillMaxSize())
@@ -308,7 +307,7 @@ private fun MediaSlot(
                 .graphicsLayer { alpha = if (isWeb) 1f else 0f },
         )
 
-        if (isImage && asset != null) {
+        if (isImage) {
             val model = remember(asset.uri) {
                 ImageRequest.Builder(context)
                     .data(if (asset.uri.startsWith("/")) File(asset.uri) else asset.uri)

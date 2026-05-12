@@ -1,4 +1,4 @@
-package com.514sid.gapless
+package com._514sid.gapless
 
 /**
  * Runtime configuration for [GaplessPlayer].

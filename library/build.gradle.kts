@@ -1,13 +1,12 @@
 plugins {
     alias(libs.plugins.android.library)
-    alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
     id("maven-publish")
     id("signing")
 }
 
 android {
-    namespace = "com.514sid.gapless"
+    namespace = "com._514sid.gapless"
     compileSdk = libs.versions.compileSdk.get().toInt()
 
     defaultConfig {
@@ -22,10 +21,6 @@ android {
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
-    }
-
-    kotlinOptions {
-        jvmTarget = "17"
     }
 
     publishing {

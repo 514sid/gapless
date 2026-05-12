@@ -1,6 +1,6 @@
-package com.514sid.gapless.internal
+package com._514sid.gapless.internal
 
-import com.514sid.gapless.GaplessAsset
+import com._514sid.gapless.GaplessAsset
 
 internal object PlaylistManager {
     /**
@@ -9,7 +9,7 @@ internal object PlaylistManager {
      * When only one asset exists it is cloned via [GaplessAsset.clone] so
      * the gapless double-buffer always has two distinct slot IDs to work with.
      *
-     * When [shuffle] is true the list is randomised, ensuring the asset that was playing
+     * When [shuffle] is true the list is randomized, ensuring the asset that was playing
      * last ([lastId]) does not appear first in the new order.
      */
     fun prepare(

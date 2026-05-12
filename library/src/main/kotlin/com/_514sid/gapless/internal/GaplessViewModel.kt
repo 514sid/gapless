@@ -1,11 +1,11 @@
-package com.514sid.gapless.internal
+package com._514sid.gapless.internal
 
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
-import com.514sid.gapless.GaplessAsset
-import com.514sid.gapless.GaplessEvent
-import com.514sid.gapless.GaplessPlayerConfig
+import com._514sid.gapless.GaplessAsset
+import com._514sid.gapless.GaplessEvent
+import com._514sid.gapless.GaplessPlayerConfig
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
 

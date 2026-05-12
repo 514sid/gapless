@@ -1,9 +1,9 @@
 [versions]
-agp            = "9.2.0"
+agp            = "9.0.0"
 kotlin         = "2.3.21"
 compileSdk     = "36"
 minSdk         = "26"
-composeBom     = "2026.04.01"
+composeBom     = "2026.05.00"
 lifecycle      = "2.10.0"
 media3         = "1.10.0"
 coil           = "3.4.0"
