@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <!--
         INTERNET is needed for web assets (WebView) and remote image / video URLs.
         This permission is automatically merged into the consuming app's manifest.
