@@ -108,14 +108,11 @@ data class GaplessAsset(
             val now = LocalTime.now(clock)
 
             if (to.isBefore(from)) {
-                // Midnight-crossing window (e.g., 22:00 to 06:00)
                 !now.isBefore(from) || now.isBefore(to)
             } else {
-                // Standard window (e.g., 09:00 to 17:00)
                 !now.isBefore(from) && now.isBefore(to)
             }
         } catch (_: DateTimeParseException) {
-            // Failsafe: if the backend sends garbage data, allow it to play rather than crashing
             true
         }
     }
