@@ -70,7 +70,14 @@ internal class PlaylistManager {
             val currentIndex = list.indexOfFirst { it.id == currentAsset?.id }.coerceAtLeast(0)
             val nextIndex = list.indexOfFirst { it.id == next.id }
 
-            _currentSlot.value = newSlot(next, isActive = true)
+            val preload = _preloadSlot.value
+            if (preload != null && preload.asset?.id == next.id) {
+                _currentSlot.value = preload.copy(isActive = true)
+                _preloadSlot.value = null
+            } else {
+                _currentSlot.value = newSlot(next, isActive = true)
+            }
+
             currentElapsedMs = 0
 
             schedulePreload(next)
@@ -90,7 +97,13 @@ internal class PlaylistManager {
             findNextActive(_playlist.value, current.id)
         } else null
 
-        _preloadSlot.value = next?.let { newSlot(it, isActive = false) }
+        if (next != null) {
+            if (_preloadSlot.value?.asset?.id != next.id) {
+                _preloadSlot.value = newSlot(next, isActive = false)
+            }
+        } else {
+            _preloadSlot.value = null
+        }
     }
 
     private fun refreshPlaylist() {
@@ -149,7 +162,6 @@ internal class PlaylistManager {
         shuffle: Boolean,
         lastId: String?
     ): List<GaplessAsset> {
-
         if (source.isEmpty()) return emptyList()
         if (!shuffle) return source
 
