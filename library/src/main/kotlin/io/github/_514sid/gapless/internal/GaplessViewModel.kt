@@ -30,17 +30,29 @@ internal class GaplessViewModel(app: Application) : AndroidViewModel(app) {
 
         currentSlot
             .onEach { state ->
-                if (state?.id != lastSlot?.id) {
-                    lastSlot?.asset?.let { _events.tryEmit(GaplessEvent.Finished(it)) }
-                    state?.asset?.let { _events.tryEmit(GaplessEvent.Started(it)) }
+                val prev = lastSlot
+
+                if (state?.playbackId != prev?.playbackId) {
+                    prev?.asset?.let { asset ->
+                        _events.tryEmit(
+                            GaplessEvent.Finished(asset, prev.playbackId)
+                        )
+                    }
+
+                    state?.asset?.let { asset ->
+                        _events.tryEmit(
+                            GaplessEvent.Started(asset, state.playbackId)
+                        )
+                    }
                 }
+
                 lastSlot = state
             }
             .launchIn(viewModelScope)
 
         preloadSlot
             .filterNotNull()
-            .distinctUntilChanged { old, new -> old.asset?.id == new.asset?.id && old.id == new.id }
+            .distinctUntilChanged { old, new -> old.asset?.id == new.asset?.id && old.playbackId == new.playbackId }
             .onEach { state ->
                 state.asset?.let {
                     _events.tryEmit(GaplessEvent.Preloading(it))

@@ -40,7 +40,7 @@ internal fun WebSlot(
         }
     }
 
-    LaunchedEffect(slotData.id) {
+    LaunchedEffect(slotData.playbackId) {
         val asset = slotData.asset ?: return@LaunchedEffect
         webView.webViewClient = object : WebViewClient() {
             override fun onReceivedError(

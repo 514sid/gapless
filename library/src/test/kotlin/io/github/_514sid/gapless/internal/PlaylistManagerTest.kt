@@ -37,12 +37,12 @@ class PlaylistManagerTest {
 
         manager.update(listOf(asset1, asset2), shuffle = false, config = config)
 
-        val firstSlotId = manager.currentSlot.value?.id ?: 0L
+        val firstSlotId = manager.currentSlot.value?.playbackId
 
         manager.advance()
 
         assertEquals("asset_1", manager.currentSlot.value?.asset?.id)
-        assertTrue((manager.currentSlot.value?.id ?: 0L) > firstSlotId)
+        assertNotEquals(manager.currentSlot.value?.playbackId, firstSlotId)
 
         assertEquals("asset_1", manager.preloadSlot.value?.asset?.id)
     }
@@ -69,14 +69,14 @@ class PlaylistManagerTest {
 
         manager.update(listOf(asset1), shuffle = true, config = config)
 
-        val id1 = manager.currentSlot.value?.id ?: 0L
+        val id1 = manager.currentSlot.value?.playbackId ?: 0L
         assertEquals("asset_1", manager.currentSlot.value?.asset?.id)
 
         manager.advance()
-        val id2 = manager.currentSlot.value?.id ?: 0L
+        val id2 = manager.currentSlot.value?.playbackId ?: 0L
 
         assertEquals("asset_1", manager.currentSlot.value?.asset?.id)
-        assertTrue(id2 > id1)
+        assertNotEquals(id2, id1)
 
         assertEquals("asset_1", manager.preloadSlot.value?.asset?.id)
     }
@@ -91,21 +91,21 @@ class PlaylistManagerTest {
 
         manager.update(listOf(asset1), shuffle = false, config = config)
 
-        val id1 = manager.currentSlot.value?.id ?: 0L
+        val id1 = manager.currentSlot.value?.playbackId
 
         manager.tick()
-        val id2 = manager.currentSlot.value?.id ?: 0L
+        val id2 = manager.currentSlot.value?.playbackId
 
-        assertTrue(id2 > id1)
+        assertNotEquals(id2, id1)
 
         assertEquals("asset_1", manager.currentSlot.value?.asset?.id)
         assertEquals("asset_1", manager.preloadSlot.value?.asset?.id)
 
         manager.tick()
-        val id3 = manager.currentSlot.value?.id ?: 0L
+        val id3 = manager.currentSlot.value?.playbackId
 
         assertEquals("asset_1", manager.currentSlot.value?.asset?.id)
-        assertTrue(id3 > id1)
+        assertNotEquals(id3, id1)
     }
 
     @Test
@@ -123,13 +123,13 @@ class PlaylistManagerTest {
         assertEquals("asset_1", manager.currentSlot.value?.asset?.id)
         assertNull(manager.preloadSlot.value)
 
-        val id1 = manager.currentSlot.value?.id ?: 0L
+        val id1 = manager.currentSlot.value?.playbackId
 
         manager.tick()
 
         assertEquals("asset_1", manager.currentSlot.value?.asset?.id)
         assertEquals("asset_1", manager.preloadSlot.value?.asset?.id)
-        assertTrue((manager.currentSlot.value?.id ?: 0L) > id1)
+        assertNotEquals(manager.currentSlot.value?.playbackId, id1)
     }
 
     @Test
@@ -153,7 +153,7 @@ class PlaylistManagerTest {
 
         manager.update(listOf(asset1), false, config)
         val firstState = manager.currentSlot.value
-        val firstId = firstState?.id ?: 0L
+        val firstId = firstState?.playbackId
 
         manager.update(
             listOf(asset1, createTestAsset("asset_2")),
@@ -163,7 +163,7 @@ class PlaylistManagerTest {
 
         val secondState = manager.currentSlot.value
 
-        assertEquals(firstId, secondState?.id)
+        assertEquals(firstId, secondState?.playbackId)
         assertEquals("asset_1", secondState?.asset?.id)
 
         assertNull(manager.preloadSlot.value)

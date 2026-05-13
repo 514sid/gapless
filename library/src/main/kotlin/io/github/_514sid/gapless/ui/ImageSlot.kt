@@ -21,7 +21,7 @@ internal fun ImageSlot(
     val context = LocalContext.current
     val asset = slotData.asset ?: return
 
-    val model = remember(slotData.id) {
+    val model = remember(slotData.playbackId) {
         ImageRequest.Builder(context)
             .data(if (asset.uri.startsWith("/")) File(asset.uri) else asset.uri)
             .crossfade(true)

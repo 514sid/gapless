@@ -20,7 +20,6 @@ internal class PlaylistManager {
     private val _playlist = MutableStateFlow<List<GaplessAsset>>(emptyList())
 
     private var currentElapsedMs = 0L
-    private var slotCounter = 0L
 
     private var shuffleEnabled = false
     private var sourceAssets: List<GaplessAsset> = emptyList()
@@ -143,7 +142,6 @@ internal class PlaylistManager {
         _currentSlot.value = null
         _preloadSlot.value = null
         currentElapsedMs = 0
-        slotCounter = 0L
     }
 
     private fun newSlot(
@@ -151,7 +149,6 @@ internal class PlaylistManager {
         isActive: Boolean
     ): MediaSlotData {
         return MediaSlotData(
-            id = slotCounter++,
             asset = asset,
             isActive = isActive
         )

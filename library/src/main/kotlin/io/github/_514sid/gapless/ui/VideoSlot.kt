@@ -41,7 +41,7 @@ internal fun VideoSlot(
         }
     }
 
-    LaunchedEffect(slotData.id) {
+    LaunchedEffect(slotData.playbackId) {
         val asset = slotData.asset ?: return@LaunchedEffect
         firstFrameReady = false
         videoRatio = null
