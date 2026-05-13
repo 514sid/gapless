@@ -39,7 +39,6 @@ data class GaplessAsset(
     val refreshIntervalMs: Long? = null,
 ) {
     companion object {
-        internal const val CLONE_SUFFIX = "_2"
         private val TIME_FORMATTER = DateTimeFormatter.ofPattern("HH:mm[:ss]")
         private const val MIME_PREFIX_VIDEO = "video/"
         private const val MIME_PREFIX_IMAGE = "image/"
@@ -69,18 +68,6 @@ data class GaplessAsset(
      */
     val isWeb: Boolean
         get() = !isVideo && !isImage
-
-    /**
-     * Returns the base identifier, stripped of any internal clone suffixes.
-     */
-    val normalizedId: String
-        get() = id.removeSuffix(CLONE_SUFFIX)
-
-    /**
-     * Creates a shallow copy of this asset with a specialized suffix appended to its [id].
-     * Useful for preventing ID collisions when an asset appears multiple times in a queue.
-     */
-    fun clone(): GaplessAsset = copy(id = "$id$CLONE_SUFFIX")
 
     /**
      * Checks if the asset is allowed to play right now, evaluated against the system clock.

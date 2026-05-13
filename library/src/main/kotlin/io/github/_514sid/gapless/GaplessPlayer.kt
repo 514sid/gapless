@@ -17,8 +17,6 @@ import io.github._514sid.gapless.ui.RotatedScreenContainer
  * Maintains two render slots internally so the next asset is always preloaded and buffered
  * before the current one finishes, producing seamless black-frame-free transitions.
  *
- * // ... (keep existing docs for supported content, scheduling, errors, scope) ...
- *
  * @param assets     Ordered list of assets to play. Passing a new list hot-swaps the playlist
  * while preserving the currently-playing asset when possible.
  * @param rotation   Screen rotation in degrees — `0`, `90`, `180`, or `270`. Content is rotated
