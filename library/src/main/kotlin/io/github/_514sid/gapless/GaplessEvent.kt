@@ -10,7 +10,4 @@ sealed class GaplessEvent {
     /** Fired when a video, image, or web asset fails to render. The asset is automatically
      *  removed from the playlist for the current session. */
     data class PlaybackError(val asset: GaplessAsset, val message: String) : GaplessEvent()
-
-    /** Fired when the active playlist is empty (no assets, or all are outside their schedule/disabled). */
-    data object PlaylistEmpty : GaplessEvent()
 }

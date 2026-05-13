@@ -5,12 +5,23 @@ import io.github._514sid.gapless.GaplessPlayerConfig
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import java.time.Clock
+import java.time.Duration
 
-internal class PlaylistManager(
-    private val onPlaylistEmpty: () -> Unit
-) {
-    private val _currentAsset = MutableStateFlow<GaplessAsset?>(null)
-    val currentAsset: StateFlow<GaplessAsset?> = _currentAsset.asStateFlow()
+/**
+ * Represents the current playback session.
+ * @property asset The actual media metadata.
+ * @property generation A unique identifier for this specific playback instance.
+ * Increasing this value signals the UI to reset players/progress, even if the [asset] is the same.
+ */
+data class PlaybackState(
+    val asset: GaplessAsset,
+    val generation: Long
+)
+
+internal class PlaylistManager {
+    private val _currentAsset = MutableStateFlow<PlaybackState?>(null)
+    val currentAsset: StateFlow<PlaybackState?> = _currentAsset.asStateFlow()
 
     private val _preloadAsset = MutableStateFlow<GaplessAsset?>(null)
     val preloadAsset: StateFlow<GaplessAsset?> = _preloadAsset.asStateFlow()
@@ -18,6 +29,7 @@ internal class PlaylistManager(
     private val _playlist = MutableStateFlow<List<GaplessAsset>>(emptyList())
 
     private var currentElapsedMs = 0L
+    private var generation = 0L
 
     private var shuffleEnabled = false
     private var sourceAssets: List<GaplessAsset> = emptyList()
@@ -33,7 +45,7 @@ internal class PlaylistManager(
     fun tick() {
         if (_playlist.value.isEmpty()) return
 
-        val current = _currentAsset.value
+        val current = _currentAsset.value?.asset
         if (current == null || !current.isActiveNow()) {
             advance()
             return
@@ -50,20 +62,26 @@ internal class PlaylistManager(
 
     fun advance() {
         val list = _playlist.value
-        if (list.isEmpty()) { resetState(); return }
+        if (list.isEmpty()) {
+            resetState()
+            return
+        }
 
-        val currentId = _currentAsset.value?.id
-        val currentIndex = list.indexOfFirst { it.id == currentId }.coerceAtLeast(0)
-        val next = findNextActive(list, currentId)
+        val currentAsset = _currentAsset.value?.asset
+        val next = findNextActive(list, currentAsset?.id)
 
         if (next != null) {
+            val currentIndex = list.indexOfFirst { it.id == currentAsset?.id }.coerceAtLeast(0)
             val nextIndex = list.indexOfFirst { it.id == next.id }
+
+            _currentAsset.value = PlaybackState(next, ++generation)
+            currentElapsedMs = 0
+
+            schedulePreload(next)
+
             if (nextIndex <= currentIndex && shuffleEnabled) {
                 refreshPlaylist()
-                return
             }
-            _currentAsset.value = next
-            currentElapsedMs = 0
         } else {
             resetState()
         }
@@ -79,51 +97,42 @@ internal class PlaylistManager(
     }
 
     private fun refreshPlaylist() {
-        val playingId = _currentAsset.value?.id
-        val newList = prepare(sourceAssets, shuffleEnabled, playingId)
+        val playingAsset = _currentAsset.value?.asset
+
+        val newList = prepare(sourceAssets, shuffleEnabled, playingAsset?.id)
         _playlist.value = newList
 
-        val currentStillValid = playingId != null &&
-                newList.any { it.id == playingId } &&
-                newList.first { it.id == playingId }.isActiveNow()
+        val currentStillValid = playingAsset != null &&
+                newList.any { it.id == playingAsset.id } &&
+                newList.first { it.id == playingAsset.id }.isActiveNow()
 
-        if (currentStillValid) {
-            _currentAsset.value = newList.first { it.id == playingId }
-            schedulePreload(_currentAsset.value!!)
-        } else {
-            _currentAsset.value = newList.find { it.isActiveNow() }
+        if (!currentStillValid) {
+            val next = newList.find { it.isActiveNow() }
             currentElapsedMs = 0
 
-            val current = _currentAsset.value
-            if (current != null) {
-                schedulePreload(current)
+            if (next != null) {
+                _currentAsset.value = PlaybackState(next, ++generation)
             } else {
                 _preloadAsset.value = null
+                _currentAsset.value = null
             }
         }
-
-        if (newList.isEmpty()) onPlaylistEmpty()
     }
 
     private fun resetState() {
         _currentAsset.value = null
         _preloadAsset.value = null
         currentElapsedMs = 0
-        onPlaylistEmpty()
+        generation = 0
     }
 
     private fun prepare(source: List<GaplessAsset>, shuffle: Boolean, lastId: String?): List<GaplessAsset> {
         if (source.isEmpty()) return emptyList()
-        if (source.size == 1) {
-            val only = source.first()
-            return listOf(only, only.clone())
-        }
         if (!shuffle) return source
 
         val shuffled = source.shuffled()
-        val lastNormalized = lastId?.removeSuffix(GaplessAsset.CLONE_SUFFIX)
 
-        return if (lastNormalized != null && shuffled.first().normalizedId == lastNormalized) {
+        return if (lastId != null && shuffled.isNotEmpty() && shuffled.first().id == lastId) {
             shuffled.drop(1) + shuffled.first()
         } else {
             shuffled
@@ -132,11 +141,19 @@ internal class PlaylistManager(
 
     private fun findNextActive(playlist: List<GaplessAsset>, currentId: String?): GaplessAsset? {
         if (playlist.isEmpty()) return null
+
         val currentIndex = playlist.indexOfFirst { it.id == currentId }.coerceAtLeast(0)
+
+        val shiftedClock = Clock.offset(
+            Clock.systemDefaultZone(),
+            Duration.ofMillis(config.preloadThresholdMs)
+        )
+
         for (i in 1..playlist.size) {
             val candidate = playlist[(currentIndex + i) % playlist.size]
-            if (candidate.isActiveNow()) return candidate
+            if (candidate.isActiveAt(shiftedClock)) return candidate
         }
+
         return null
     }
 }
