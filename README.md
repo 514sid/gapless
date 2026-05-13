@@ -12,7 +12,7 @@ A self-contained gapless media player Composable for Android. It seamlessly tran
 - **Smart Scheduling**: Assets can be scheduled by date range, specific days of the week, and daily time windows (including midnight-crossing ranges).
 - **Responsive Layout**: Built-in support for content rotation (0, 90, 180, 270 degrees) without affecting the Composable's layout bounds.
 - **Shuffle Mode**: Intelligent randomization that ensures the last item played doesn't immediately repeat on a new cycle.
-- **Customizable Empty State**: Provide your own Composable to display when no assets are active or available.
+- **Customizable States**: Provide your own Composables to display when the playlist is completely empty (`emptyState`) versus when assets exist but are waiting for their scheduled time (`idleState`).
 
 ## Installation
 
@@ -20,7 +20,7 @@ Add the dependency to your `build.gradle.kts`:
 
 ```kotlin
 dependencies {
-    implementation("io.github.514sid:gapless:0.0.1")
+    implementation("io.github.514sid:gapless:0.0.3")
 }
 ```
 
@@ -48,7 +48,12 @@ GaplessPlayer(
     shuffle = true,
     emptyState = {
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            Text("Nothing to play right now", color = Color.White)
+            Text("No playlists assigned to this device.", color = Color.White)
+        }
+    },
+    idleState = {
+        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            Text("Sleeping. Scheduled content will resume later.", color = Color.Gray)
         }
     },
     onEvent = { event ->
@@ -98,11 +103,9 @@ Tweak playback engine performance:
 ## Technical Details for AI Tools
 
 - **State Management**: Uses a `GaplessViewModel` to manage the playlist lifecycle. Multiple `GaplessPlayer` calls in the same `ViewModelStoreOwner` will share state unless scoped differently.
-- **Rendering**: 
-
+- **Rendering**:
   - Videos are rendered via `TextureView` to allow for smooth alpha transitions and rotations.
   - Web content uses `WebView.onResume()`/`onPause()` to manage resource usage when inactive.
   - Image loading uses Coil 3 with `FilterQuality.High`.
-
 - **Scheduling Logic**: Temporal validations are evaluated against the system clock by default (`isActiveNow()`), but expose `isActiveAt(clock: java.time.Clock)` to allow deterministic unit testing of midnight-crossing and day-of-week logic. The temporal check is performed every `tickIntervalMs`. If an asset's schedule expires while playing, the player advances immediately.
 - **Asset Updates**: Passing a new list to `assets` performs a hot-swap. The engine attempts to keep the current asset playing if its ID still exists in the new list.
