@@ -58,8 +58,8 @@ internal fun VideoSlot(
     }
 
     LaunchedEffect(isActive, generation) {
+        exoPlayer.seekTo(0)
         if (isActive) {
-            exoPlayer.seekTo(0)
             exoPlayer.play()
         } else {
             exoPlayer.pause()
