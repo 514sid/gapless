@@ -2,48 +2,57 @@ package io.github._514sid.gapless.ui
 
 import androidx.compose.runtime.*
 import io.github._514sid.gapless.GaplessAsset
-import io.github._514sid.gapless.internal.PlaybackState
 
 @Composable
 internal fun MediaSlotManager(
-    currentAsset: PlaybackState?,
-    preloadAsset: GaplessAsset?,
+    currentSlot: MediaSlotData?,
+    preloadSlot: MediaSlotData?,
     onPlaybackError: (GaplessAsset, String) -> Unit
 ) {
-    val slots = remember { mutableStateListOf<PlaybackState?>(null, null) }
+    val slots = remember { mutableStateListOf<MediaSlotData?>(null, null) }
 
-    LaunchedEffect(currentAsset, preloadAsset) {
-        val liveIds = setOfNotNull(currentAsset?.asset?.id, preloadAsset?.id)
+    LaunchedEffect(currentSlot, preloadSlot) {
+        val liveIds = setOfNotNull(currentSlot?.id, preloadSlot?.id)
 
         for (i in 0..1) {
-            if (slots[i]?.asset?.id !in liveIds) slots[i] = null
-        }
-
-        currentAsset?.let { state ->
-            val existing = slots.indexOfFirst { it?.asset?.id == state.asset.id }
-            if (existing != -1) slots[existing] = state
-            else {
-                val empty = slots.indexOfFirst { it == null }
-                if (empty != -1) slots[empty] = state
+            val slot = slots[i]
+            if (slot != null && slot.id !in liveIds) {
+                slots[i] = null
             }
         }
 
-        preloadAsset?.let { asset ->
-            val existing = slots.indexOfFirst { it?.asset?.id == asset.id }
-            if (existing == -1) {
-                val empty = slots.indexOfFirst { it == null }
-                if (empty != -1) slots[empty] = PlaybackState(asset, -1L)
+        currentSlot?.let { data ->
+            val existingIndex = slots.indexOfFirst { it?.id == data.id }
+            if (existingIndex != -1) {
+                slots[existingIndex] = data
+            } else {
+                val emptyIndex = slots.indexOfFirst { it == null }
+                if (emptyIndex != -1) {
+                    slots[emptyIndex] = data
+                }
+            }
+        }
+
+        preloadSlot?.let { data ->
+            val existingIndex = slots.indexOfFirst { it?.id == data.id }
+            if (existingIndex != -1) {
+                slots[existingIndex] = data
+            } else {
+                val emptyIndex = slots.indexOfFirst { it == null }
+                if (emptyIndex != -1) {
+                    slots[emptyIndex] = data
+                }
             }
         }
     }
 
     for (i in 0..1) {
-        val slotState = slots[i]
-        MediaSlot(
-            asset = slotState?.asset,
-            generation = slotState?.generation ?: 0L,
-            isActive = slotState?.asset?.id == currentAsset?.asset?.id,
-            onError = onPlaybackError
-        )
+        val slotData = slots[i]
+        if (slotData != null) {
+            MediaSlot(
+                slotData = slotData,
+                onError = onPlaybackError
+            )
+        }
     }
 }

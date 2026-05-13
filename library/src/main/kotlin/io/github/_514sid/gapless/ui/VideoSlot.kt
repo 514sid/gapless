@@ -16,7 +16,6 @@ import io.github._514sid.gapless.GaplessAsset
 @Composable
 internal fun VideoSlot(
     asset: GaplessAsset,
-    generation: Long,
     isActive: Boolean,
     onError: (GaplessAsset, String) -> Unit,
 ) {
@@ -57,7 +56,7 @@ internal fun VideoSlot(
         exoPlayer.prepare()
     }
 
-    LaunchedEffect(isActive, generation) {
+    LaunchedEffect(isActive) {
         exoPlayer.seekTo(0)
         if (isActive) {
             exoPlayer.play()

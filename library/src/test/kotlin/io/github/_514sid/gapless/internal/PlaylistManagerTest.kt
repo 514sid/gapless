@@ -37,14 +37,14 @@ class PlaylistManagerTest {
 
         manager.update(listOf(asset1, asset2), shuffle = false, config = config)
 
-        val firstGen = manager.currentAsset.value?.generation ?: 0L
+        val firstSlotId = manager.currentSlot.value?.id ?: 0L
 
         manager.advance()
 
-        assertEquals("asset_1", manager.currentAsset.value?.asset?.id)
-        assertTrue((manager.currentAsset.value?.generation ?: 0L) > firstGen)
+        assertEquals("asset_1", manager.currentSlot.value?.asset?.id)
+        assertTrue((manager.currentSlot.value?.id ?: 0L) > firstSlotId)
 
-        assertEquals("asset_1", manager.preloadAsset.value?.id)
+        assertEquals("asset_1", manager.preloadSlot.value?.asset?.id)
     }
 
     @Test
@@ -57,9 +57,9 @@ class PlaylistManagerTest {
             config = GaplessPlayerConfig(preloadThresholdMs = 200L)
         )
 
-        assertEquals("asset_1", manager.currentAsset.value?.asset?.id)
+        assertEquals("asset_1", manager.currentSlot.value?.asset?.id)
 
-        assertNull(manager.preloadAsset.value)
+        assertNull(manager.preloadSlot.value)
     }
 
     @Test
@@ -69,16 +69,16 @@ class PlaylistManagerTest {
 
         manager.update(listOf(asset1), shuffle = true, config = config)
 
-        val gen1 = manager.currentAsset.value?.generation ?: 0L
-        assertEquals("asset_1", manager.currentAsset.value?.asset?.id)
+        val id1 = manager.currentSlot.value?.id ?: 0L
+        assertEquals("asset_1", manager.currentSlot.value?.asset?.id)
 
         manager.advance()
-        val gen2 = manager.currentAsset.value?.generation ?: 0L
+        val id2 = manager.currentSlot.value?.id ?: 0L
 
-        assertEquals("asset_1", manager.currentAsset.value?.asset?.id)
-        assertTrue(gen2 > gen1)
+        assertEquals("asset_1", manager.currentSlot.value?.asset?.id)
+        assertTrue(id2 > id1)
 
-        assertEquals("asset_1", manager.preloadAsset.value?.id)
+        assertEquals("asset_1", manager.preloadSlot.value?.asset?.id)
     }
 
     @Test
@@ -91,21 +91,21 @@ class PlaylistManagerTest {
 
         manager.update(listOf(asset1), shuffle = false, config = config)
 
-        val gen1 = manager.currentAsset.value?.generation ?: 0L
+        val id1 = manager.currentSlot.value?.id ?: 0L
 
         manager.tick()
-        val gen2 = manager.currentAsset.value?.generation ?: 0L
+        val id2 = manager.currentSlot.value?.id ?: 0L
 
-        assertEquals("asset_1", manager.currentAsset.value?.asset?.id)
-        assertTrue(gen2 > gen1)
+        assertTrue(id2 > id1)
 
-        assertEquals("asset_1", manager.preloadAsset.value?.id)
+        assertEquals("asset_1", manager.currentSlot.value?.asset?.id)
+        assertEquals("asset_1", manager.preloadSlot.value?.asset?.id)
 
         manager.tick()
-        val gen3 = manager.currentAsset.value?.generation ?: 0L
+        val id3 = manager.currentSlot.value?.id ?: 0L
 
-        assertEquals("asset_1", manager.currentAsset.value?.asset?.id)
-        assertTrue(gen3 > gen2)
+        assertEquals("asset_1", manager.currentSlot.value?.asset?.id)
+        assertTrue(id3 > id1)
     }
 
     @Test
@@ -120,16 +120,16 @@ class PlaylistManagerTest {
 
         manager.update(listOf(asset1, asset2), shuffle = false, config = config)
 
-        assertEquals("asset_1", manager.currentAsset.value?.asset?.id)
-        assertNull(manager.preloadAsset.value)
+        assertEquals("asset_1", manager.currentSlot.value?.asset?.id)
+        assertNull(manager.preloadSlot.value)
 
-        val gen1 = manager.currentAsset.value?.generation ?: 0L
+        val id1 = manager.currentSlot.value?.id ?: 0L
 
         manager.tick()
 
-        assertEquals("asset_1", manager.currentAsset.value?.asset?.id)
-        assertEquals("asset_1", manager.preloadAsset.value?.id)
-        assertTrue((manager.currentAsset.value?.generation ?: 0L) > gen1)
+        assertEquals("asset_1", manager.currentSlot.value?.asset?.id)
+        assertEquals("asset_1", manager.preloadSlot.value?.asset?.id)
+        assertTrue((manager.currentSlot.value?.id ?: 0L) > id1)
     }
 
     @Test
@@ -142,8 +142,8 @@ class PlaylistManagerTest {
             config = GaplessPlayerConfig()
         )
 
-        assertNull(manager.currentAsset.value)
-        assertNull(manager.preloadAsset.value)
+        assertNull(manager.currentSlot.value)
+        assertNull(manager.preloadSlot.value)
     }
 
     @Test
@@ -152,8 +152,8 @@ class PlaylistManagerTest {
         val config = GaplessPlayerConfig()
 
         manager.update(listOf(asset1), false, config)
-        val firstState = manager.currentAsset.value
-        val firstGen = firstState?.generation ?: 0L
+        val firstState = manager.currentSlot.value
+        val firstId = firstState?.id ?: 0L
 
         manager.update(
             listOf(asset1, createTestAsset("asset_2")),
@@ -161,12 +161,12 @@ class PlaylistManagerTest {
             config
         )
 
-        val secondState = manager.currentAsset.value
+        val secondState = manager.currentSlot.value
 
-        assertEquals(firstGen, secondState?.generation)
+        assertEquals(firstId, secondState?.id)
         assertEquals("asset_1", secondState?.asset?.id)
 
-        assertNull(manager.preloadAsset.value)
+        assertNull(manager.preloadSlot.value)
     }
 
     @Test
@@ -179,6 +179,6 @@ class PlaylistManagerTest {
             config = GaplessPlayerConfig(preloadThresholdMs = 2000L)
         )
 
-        assertNull(manager.preloadAsset.value)
+        assertNull(manager.preloadSlot.value)
     }
 }

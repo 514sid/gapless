@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import io.github._514sid.gapless.GaplessAsset
 import io.github._514sid.gapless.GaplessEvent
 import io.github._514sid.gapless.GaplessPlayerConfig
+import io.github._514sid.gapless.ui.MediaSlotData
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
 
@@ -18,25 +19,39 @@ internal class GaplessViewModel(app: Application) : AndroidViewModel(app) {
 
     private val playlistManager = PlaylistManager()
 
-    val currentAsset: StateFlow<PlaybackState?> = playlistManager.currentAsset
-    val preloadAsset: StateFlow<GaplessAsset?> = playlistManager.preloadAsset
+    val currentSlot: StateFlow<MediaSlotData?> = playlistManager.currentSlot
+    val preloadSlot: StateFlow<MediaSlotData?> = playlistManager.preloadSlot
 
     private var currentConfig = GaplessPlayerConfig()
     private var job: Job? = null
 
     init {
-        currentAsset
-            .filterNotNull()
-            .distinctUntilChanged()
+        var lastEmittedAsset: GaplessAsset? = null
+
+        currentSlot
             .onEach { state ->
-                _events.tryEmit(GaplessEvent.NowPlaying(state.asset))
+                val newAsset = state?.asset
+                
+                if (lastEmittedAsset != null && lastEmittedAsset?.id != newAsset?.id) {
+                    _events.tryEmit(GaplessEvent.Finished(lastEmittedAsset!!))
+                }
+
+                if (newAsset != null && newAsset.id != lastEmittedAsset?.id) {
+                    _events.tryEmit(GaplessEvent.Started(newAsset))
+                }
+
+                lastEmittedAsset = newAsset
             }
             .launchIn(viewModelScope)
 
-        preloadAsset
+        preloadSlot
             .filterNotNull()
-            .distinctUntilChanged()
-            .onEach { _events.tryEmit(GaplessEvent.Preloading(it)) }
+            .distinctUntilChanged { old, new -> old.asset?.id == new.asset?.id && old.id == new.id }
+            .onEach { state ->
+                state.asset?.let {
+                    _events.tryEmit(GaplessEvent.Preloading(it))
+                }
+            }
             .launchIn(viewModelScope)
     }
 
@@ -52,14 +67,14 @@ internal class GaplessViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun handlePlaybackError(asset: GaplessAsset, message: String) {
-        val isRelevant = asset.id == currentAsset.value?.asset?.id ||
-                asset.id == preloadAsset.value?.id
+        val isRelevant = asset.id == currentSlot.value?.asset?.id ||
+                asset.id == preloadSlot.value?.asset?.id
 
         if (!isRelevant) return
 
         _events.tryEmit(GaplessEvent.PlaybackError(asset, message))
 
-        if (currentAsset.value?.asset?.id == asset.id) {
+        if (currentSlot.value?.asset?.id == asset.id) {
             playlistManager.advance()
         }
     }

@@ -1,8 +1,11 @@
 package io.github._514sid.gapless
 
 sealed class GaplessEvent {
-    /** Fired whenever a new asset starts playing (deduplicated — won't fire again for the same asset). */
-    data class NowPlaying(val asset: GaplessAsset) : GaplessEvent()
+    /** Fired whenever a new asset starts playing. */
+    data class Started(val asset: GaplessAsset) : GaplessEvent()
+
+    /** Fired whenever an asset finishes playing (reaches its duration). */
+    data class Finished(val asset: GaplessAsset) : GaplessEvent()
 
     /** Fired when an asset is queued for preload (typically ~5 s before the current one ends). */
     data class Preloading(val asset: GaplessAsset) : GaplessEvent()

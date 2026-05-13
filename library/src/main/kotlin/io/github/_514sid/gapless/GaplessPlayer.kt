@@ -52,8 +52,8 @@ fun GaplessPlayer(
         viewModel.events.collect { currentOnEvent(it) }
     }
 
-    val currentAsset by viewModel.currentAsset.collectAsState()
-    val preloadAsset by viewModel.preloadAsset.collectAsState()
+    val currentSlot by viewModel.currentSlot.collectAsState()
+    val preloadSlot by viewModel.preloadSlot.collectAsState()
     val isInitialized by viewModel.isInitialized.collectAsState()
 
     if (!isInitialized) return
@@ -61,11 +61,11 @@ fun GaplessPlayer(
     RotatedScreenContainer(rotation) {
         when {
             assets.isEmpty() -> emptyState()
-            currentAsset == null && preloadAsset == null -> idleState()
+            currentSlot == null && preloadSlot == null -> idleState()
             else -> {
                 MediaSlotManager(
-                    currentAsset = currentAsset,
-                    preloadAsset = preloadAsset,
+                    currentSlot = currentSlot,
+                    preloadSlot = preloadSlot,
                     onPlaybackError = { asset, msg -> viewModel.handlePlaybackError(asset, msg) }
                 )
             }
