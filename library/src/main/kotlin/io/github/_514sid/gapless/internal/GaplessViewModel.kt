@@ -138,26 +138,54 @@ internal class GaplessViewModel(app: Application) : AndroidViewModel(app) {
 
     // ── Helpers ───────────────────────────────────────────────────────────────
 
+    /**
+     * Rebuilds the internal playlist and resolves the playback state.
+     * 
+     * This function is triggered whenever the source assets change (e.g., database updates)
+     * or when the shuffle toggle is flipped. Its primary goal is to perform a "hot-swap": 
+     * if the currently playing asset still exists in the new list and is still allowed to play, 
+     * it will keep playing without interruption. Otherwise, it resets the player to the next 
+     * available active asset (or transitions to the empty state).
+     */
     private fun refreshPlaylist() {
         val playingId = _currentAsset.value?.id
-
+    
+        // 1. Prepare the new playlist, applying shuffle logic if enabled.
+        // We pass the playingId so the manager can keep it in the correct relative position.
         val newList = PlaylistManager.prepare(sourceAssets, shuffleEnabled, playingId)
         _playlist.value = newList
-
+    
+        // 2. Determine if we can seamlessly continue playing the current asset.
+        // It must exist in the new list AND its temporal schedule must still be active.
         val currentStillValid = playingId != null &&
                 newList.any { it.id == playingId } &&
                 newList.first { it.id == playingId }.isActiveNow()
-
+    
         if (currentStillValid) {
+            // Hot-swap the asset instance. We grab the new instance from the list because 
+            // the database might have updated its URI or duration, but we intentionally do NOT 
+            // reset _currentElapsedMs so the video/image doesn't restart visually.
             _currentAsset.value = newList.first { it.id == playingId }
-            // Keep elapsed time so the current asset doesn't restart.
             schedulePreload(_currentAsset.value!!)
         } else {
+            // The current asset was removed, disabled, or its time window expired.
+            // Find the very first asset in the new list that is allowed to play right now.
             _currentAsset.value = newList.find { it.isActiveNow() }
-            _currentElapsedMs.value = 0
-            _currentAsset.value?.let { schedulePreload(it) }
+            _currentElapsedMs.value = 0 // Start fresh
+            
+            val current = _currentAsset.value
+            if (current != null) {
+                // We found a valid asset, start preloading the one that comes after it.
+                schedulePreload(current)
+            } else {
+                // Prevent the "black screen" bug. If no valid asset exists in the entire 
+                // new list, we must explicitly wipe the preload slot so the UI layer knows 
+                // to render the emptyState() Composable.
+                _preloadAsset.value = null
+            }
         }
-
+    
+        // Notify the UI layer if there is absolutely nothing to play.
         if (newList.isEmpty()) _events.tryEmit(GaplessEvent.PlaylistEmpty)
     }
 
