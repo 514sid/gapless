@@ -31,6 +31,8 @@ data class GaplessAsset(
     val uri: String,
     val mimeType: String,
     val durationMs: Long = 10_000L,
+    val width: Int? = null,
+    val height: Int? = null,
     val startDate: Long? = null,
     val endDate: Long? = null,
     val playDays: Set<DayOfWeek>? = null,

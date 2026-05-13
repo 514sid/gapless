@@ -14,45 +14,36 @@ internal fun MediaSlotManager(
     LaunchedEffect(currentSlot, preloadSlot) {
         val liveIds = setOfNotNull(currentSlot?.id, preloadSlot?.id)
 
+        // Mark stale slots inactive but keep them alive
         for (i in 0..1) {
             val slot = slots[i]
-            if (slot != null && slot.id !in liveIds) {
-                slots[i] = null
+            if (slot != null && slot.id !in liveIds && slot.isActive) {
+                slots[i] = slot.copy(isActive = false)
             }
         }
 
-        currentSlot?.let { data ->
-            val existingIndex = slots.indexOfFirst { it?.id == data.id }
-            if (existingIndex != -1) {
-                slots[existingIndex] = data
-            } else {
-                val emptyIndex = slots.indexOfFirst { it == null }
-                if (emptyIndex != -1) {
-                    slots[emptyIndex] = data
-                }
+        // Update in-place for already-assigned slot IDs
+        for (i in 0..1) {
+            slots[i] = when (slots[i]?.id) {
+                currentSlot?.id -> currentSlot
+                preloadSlot?.id -> preloadSlot
+                else -> slots[i]
             }
         }
 
-        preloadSlot?.let { data ->
-            val existingIndex = slots.indexOfFirst { it?.id == data.id }
-            if (existingIndex != -1) {
-                slots[existingIndex] = data
-            } else {
-                val emptyIndex = slots.indexOfFirst { it == null }
-                if (emptyIndex != -1) {
-                    slots[emptyIndex] = data
-                }
+        // Assign any unplaced live slots into stale/empty positions
+        listOfNotNull(currentSlot, preloadSlot).forEach { data ->
+            if (slots.none { it?.id == data.id }) {
+                val targetIdx = slots.indexOfFirst { it == null || it.id !in liveIds }
+                if (targetIdx != -1) slots[targetIdx] = data
             }
         }
     }
 
     for (i in 0..1) {
-        val slotData = slots[i]
-        if (slotData != null) {
-            MediaSlot(
-                slotData = slotData,
-                onError = onPlaybackError
-            )
-        }
+        MediaSlot(
+            slotData = slots[i],
+            onError = onPlaybackError
+        )
     }
 }

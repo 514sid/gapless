@@ -15,12 +15,13 @@ import java.io.File
 
 @Composable
 internal fun ImageSlot(
-    asset: GaplessAsset,
+    slotData: MediaSlotData,
     onError: (GaplessAsset, String) -> Unit,
 ) {
     val context = LocalContext.current
+    val asset = slotData.asset ?: return
 
-    val model = remember(asset.id, asset.uri) {
+    val model = remember(slotData.id) {
         ImageRequest.Builder(context)
             .data(if (asset.uri.startsWith("/")) File(asset.uri) else asset.uri)
             .crossfade(true)

@@ -26,21 +26,15 @@ internal class GaplessViewModel(app: Application) : AndroidViewModel(app) {
     private var job: Job? = null
 
     init {
-        var lastEmittedAsset: GaplessAsset? = null
+        var lastSlot: MediaSlotData? = null
 
         currentSlot
             .onEach { state ->
-                val newAsset = state?.asset
-                
-                if (lastEmittedAsset != null && lastEmittedAsset?.id != newAsset?.id) {
-                    _events.tryEmit(GaplessEvent.Finished(lastEmittedAsset!!))
+                if (state?.id != lastSlot?.id) {
+                    lastSlot?.asset?.let { _events.tryEmit(GaplessEvent.Finished(it)) }
+                    state?.asset?.let { _events.tryEmit(GaplessEvent.Started(it)) }
                 }
-
-                if (newAsset != null && newAsset.id != lastEmittedAsset?.id) {
-                    _events.tryEmit(GaplessEvent.Started(newAsset))
-                }
-
-                lastEmittedAsset = newAsset
+                lastSlot = state
             }
             .launchIn(viewModelScope)
 

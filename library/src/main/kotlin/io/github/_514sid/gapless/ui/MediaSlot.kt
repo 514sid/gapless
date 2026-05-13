@@ -11,23 +11,24 @@ import io.github._514sid.gapless.GaplessAsset
 
 @Composable
 internal fun MediaSlot(
-    slotData: MediaSlotData,
+    slotData: MediaSlotData?,
     onError: (GaplessAsset, String) -> Unit,
 ) {
     Box(
         modifier = Modifier
             .fillMaxSize()
             .graphicsLayer {
-                alpha = if (slotData.isActive) 1f else 0f
+                alpha = if (slotData?.isActive == true) 1f else 0f
             }
-            .zIndex(if (slotData.isActive) 1f else 0f),
+            .zIndex(if (slotData?.isActive == true) 1f else 0f),
         contentAlignment = Alignment.Center,
     ) {
-        slotData.asset?.let {
+        val asset = slotData?.asset
+        if (asset != null) {
             when {
-                it.isVideo -> VideoSlot(it, slotData.isActive, onError)
-                it.isWeb -> WebSlot(it, slotData.isActive, onError)
-                it.isImage -> ImageSlot(it, onError)
+                asset.isVideo -> VideoSlot(slotData, onError)
+                asset.isWeb -> WebSlot(slotData, onError)
+                asset.isImage -> ImageSlot(slotData, onError)
             }
         }
     }

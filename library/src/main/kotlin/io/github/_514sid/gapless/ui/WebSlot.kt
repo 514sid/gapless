@@ -18,13 +18,12 @@ import io.github._514sid.gapless.GaplessAsset
 @SuppressLint("SetJavaScriptEnabled")
 @Composable
 internal fun WebSlot(
-    asset: GaplessAsset,
-    isActive: Boolean,
+    slotData: MediaSlotData,
     onError: (GaplessAsset, String) -> Unit,
 ) {
     val context = LocalContext.current
 
-    val webView = remember(asset.id) {
+    val webView = remember {
         WebView(context).apply {
             settings.javaScriptEnabled = true
             settings.domStorageEnabled = true
@@ -34,7 +33,15 @@ internal fun WebSlot(
         }
     }
 
-    DisposableEffect(asset.id) {
+    DisposableEffect(Unit) {
+        onDispose {
+            webView.stopLoading()
+            webView.destroy()
+        }
+    }
+
+    LaunchedEffect(slotData.id) {
+        val asset = slotData.asset ?: return@LaunchedEffect
         webView.webViewClient = object : WebViewClient() {
             override fun onReceivedError(
                 view: WebView?,
@@ -46,21 +53,11 @@ internal fun WebSlot(
                 }
             }
         }
-        onDispose {
-            webView.stopLoading()
-            webView.webViewClient = WebViewClient()
-            webView.destroy()
-        }
+        webView.loadUrl(asset.uri)
     }
 
-    LaunchedEffect(asset.id) {
-        if (webView.url != asset.uri) {
-            webView.loadUrl(asset.uri)
-        }
-    }
-
-    LaunchedEffect(isActive) {
-        if (isActive) {
+    LaunchedEffect(slotData.isActive) {
+        if (slotData.isActive) {
             webView.onResume()
             webView.resumeTimers()
         } else {
