@@ -157,26 +157,109 @@ private fun RotatedScreenContainer(rotation: Int, content: @Composable () -> Uni
     }
 }
 
-@SuppressLint("SetJavaScriptEnabled")
 @Composable
 private fun MediaSlot(
     asset: GaplessAsset?,
     isActive: Boolean,
     onError: (GaplessAsset, String) -> Unit,
 ) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .graphicsLayer { alpha = if (isActive) 1f else 0f }
+            .zIndex(if (isActive) 1f else 0f),
+        contentAlignment = Alignment.Center,
+    ) {
+        when {
+            asset?.isVideo == true -> {
+                VideoSlot(asset = asset, isActive = isActive, onError = onError)
+            }
+            asset?.isWeb == true -> {
+                WebSlot(asset = asset, isActive = isActive, onError = onError)
+            }
+            asset?.isImage == true -> {
+                ImageSlot(asset = asset, onError = onError)
+            }
+        }
+    }
+}
+
+@Composable
+private fun VideoSlot(
+    asset: GaplessAsset,
+    isActive: Boolean,
+    onError: (GaplessAsset, String) -> Unit,
+) {
     val context = LocalContext.current
+    var playerKey by remember { mutableIntStateOf(0) }
+    var firstFrameReady by remember { mutableStateOf(false) }
+    var videoRatio by remember { mutableStateOf<Float?>(null) }
+    val textureView = remember { TextureView(context) }
 
-    val isVideo = asset?.isVideo == true
-    val isImage = asset?.isImage == true
-    val isWeb = asset?.isWeb == true
-
-    val exoPlayer = remember {
+    val exoPlayer = remember(playerKey) {
         ExoPlayer.Builder(context).build().apply {
             repeatMode = Player.REPEAT_MODE_OFF
             volume = 0f
         }
     }
-    val textureView = remember { TextureView(context) }
+
+    DisposableEffect(playerKey) {
+        exoPlayer.setVideoTextureView(textureView)
+        onDispose { exoPlayer.release() }
+    }
+
+    LaunchedEffect(asset.id, exoPlayer) {
+        firstFrameReady = false
+        val uri = if (asset.uri.startsWith("/")) "file://${asset.uri}" else asset.uri
+        exoPlayer.setMediaItem(
+            MediaItem.Builder().setUri(uri).setMimeType(asset.mimeType).build()
+        )
+        exoPlayer.prepare()
+    }
+
+    LaunchedEffect(isActive, asset.id, exoPlayer) {
+        val state = exoPlayer.playbackState
+        if (state == Player.STATE_IDLE) return@LaunchedEffect
+
+        if (isActive) {
+            exoPlayer.seekTo(0)
+            exoPlayer.play()
+        } else {
+            if (exoPlayer.isPlaying) exoPlayer.pause()
+        }
+    }
+
+    DisposableEffect(asset.id, exoPlayer) {
+        val listener = object : Player.Listener {
+            override fun onRenderedFirstFrame() {
+                firstFrameReady = true
+            }
+            override fun onVideoSizeChanged(v: VideoSize) {
+                if (v.width > 0) videoRatio = (v.width.toFloat() * v.pixelWidthHeightRatio) / v.height
+            }
+            override fun onPlayerError(e: PlaybackException) {
+                playerKey++
+                onError(asset, e.localizedMessage ?: "Video error")
+            }
+        }
+        exoPlayer.addListener(listener)
+        onDispose { exoPlayer.removeListener(listener) }
+    }
+
+    val videoModifier = (videoRatio?.let { Modifier.then(Modifier) } ?: Modifier.fillMaxSize())
+        .graphicsLayer { alpha = if (firstFrameReady) 1f else 0f }
+
+    AndroidView(factory = { textureView }, modifier = videoModifier)
+}
+
+@SuppressLint("SetJavaScriptEnabled")
+@Composable
+private fun WebSlot(
+    asset: GaplessAsset,
+    isActive: Boolean,
+    onError: (GaplessAsset, String) -> Unit,
+) {
+    val context = LocalContext.current
     val webView = remember {
         WebView(context).apply {
             settings.javaScriptEnabled = true
@@ -185,68 +268,19 @@ private fun MediaSlot(
         }
     }
 
-    var firstFrameReady by remember { mutableStateOf(false) }
-    var videoRatio by remember { mutableStateOf<Float?>(null) }
-
-    LaunchedEffect(Unit) {
-        exoPlayer.setVideoTextureView(textureView)
-    }
-
     DisposableEffect(Unit) {
-        onDispose {
-            exoPlayer.release()
-            webView.destroy()
-        }
+        onDispose { webView.destroy() }
     }
 
-    // Load new asset into the appropriate renderer when the slot ID changes.
-    LaunchedEffect(asset?.id) {
-        if (asset == null) {
-            exoPlayer.stop()
-            exoPlayer.clearMediaItems()
-            webView.loadUrl("about:blank")
-            return@LaunchedEffect
-        }
-        when {
-            isVideo -> {
-                firstFrameReady = false
-                val uri = if (asset.uri.startsWith("/")) "file://${asset.uri}" else asset.uri
-                exoPlayer.setMediaItem(
-                    MediaItem.Builder().setUri(uri).setMimeType(asset.mimeType).build()
-                )
-                exoPlayer.prepare()
-            }
-            isWeb -> {
-                if (webView.url != asset.uri) webView.loadUrl(asset.uri)
-            }
-            else -> exoPlayer.stop()
-        }
+    LaunchedEffect(asset.id) {
+        if (webView.url != asset.uri) webView.loadUrl(asset.uri)
     }
 
-    // Play / pause in response to the active-slot flag.
-    LaunchedEffect(isActive, asset?.id) {
-        if (isActive) {
-            if (isVideo) { exoPlayer.seekTo(0); exoPlayer.play() }
-            if (isWeb) webView.onResume()
-        } else {
-            exoPlayer.pause()
-            webView.onPause()
-        }
+    LaunchedEffect(isActive) {
+        if (isActive) webView.onResume() else webView.onPause()
     }
 
-    // Wire player / web listeners; tear them down when the asset changes.
-    DisposableEffect(asset?.id) {
-        val listener = object : Player.Listener {
-            override fun onRenderedFirstFrame() { firstFrameReady = true }
-            override fun onVideoSizeChanged(v: VideoSize) {
-                if (v.width > 0) videoRatio = (v.width.toFloat() * v.pixelWidthHeightRatio) / v.height
-            }
-            override fun onPlayerError(e: PlaybackException) {
-                asset?.let { onError(it, e.localizedMessage ?: "Video error") }
-            }
-        }
-        exoPlayer.addListener(listener)
-
+    DisposableEffect(asset.id) {
         webView.webViewClient = object : WebViewClient() {
             override fun onReceivedError(
                 view: WebView?,
@@ -254,51 +288,39 @@ private fun MediaSlot(
                 error: WebResourceError?,
             ) {
                 if (request?.isForMainFrame == true) {
-                    asset?.let { onError(it, error?.description?.toString() ?: "Web error") }
+                    onError(asset, error?.description?.toString() ?: "Web error")
                 }
             }
         }
-
-        onDispose {
-            exoPlayer.removeListener(listener)
-            webView.webViewClient = WebViewClient()
-        }
+        onDispose { webView.webViewClient = WebViewClient() }
     }
 
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .graphicsLayer { alpha = if (isActive) 1f else 0f }
-            .zIndex(if (isActive) 1f else 0f),
-        contentAlignment = Alignment.Center,
-    ) {
-        val videoModifier = (videoRatio?.let { Modifier.then(Modifier) } ?: Modifier.fillMaxSize())
-            .graphicsLayer { alpha = if (isVideo && firstFrameReady) 1f else 0f }
-        AndroidView(factory = { textureView }, modifier = videoModifier)
+    AndroidView(
+        factory = { webView },
+        modifier = Modifier.fillMaxSize()
+    )
+}
 
-        AndroidView(
-            factory = { webView },
-            modifier = Modifier
-                .fillMaxSize()
-                .graphicsLayer { alpha = if (isWeb) 1f else 0f },
-        )
-
-        if (isImage) {
-            val model = remember(asset.uri) {
-                ImageRequest.Builder(context)
-                    .data(if (asset.uri.startsWith("/")) File(asset.uri) else asset.uri)
-                    .listener(onError = { _, r ->
-                        onError(asset, r.throwable.message ?: "Image error")
-                    })
-                    .build()
-            }
-            AsyncImage(
-                model = model,
-                contentDescription = null,
-                contentScale = ContentScale.Fit,
-                filterQuality = FilterQuality.High,
-                modifier = Modifier.fillMaxSize(),
-            )
-        }
+@Composable
+private fun ImageSlot(
+    asset: GaplessAsset,
+    onError: (GaplessAsset, String) -> Unit,
+) {
+    val context = LocalContext.current
+    val model = remember(asset.uri) {
+        ImageRequest.Builder(context)
+            .data(if (asset.uri.startsWith("/")) File(asset.uri) else asset.uri)
+            .listener(onError = { _, r ->
+                onError(asset, r.throwable.message ?: "Image error")
+            })
+            .build()
     }
+
+    AsyncImage(
+        model = model,
+        contentDescription = null,
+        contentScale = ContentScale.Fit,
+        filterQuality = FilterQuality.High,
+        modifier = Modifier.fillMaxSize(),
+    )
 }
