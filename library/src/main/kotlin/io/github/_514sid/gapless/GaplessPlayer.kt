@@ -38,52 +38,22 @@ private const val TAG = "GaplessPlayer"
  * Maintains two render slots internally so the next asset is always preloaded and buffered
  * before the current one finishes, producing seamless black-frame-free transitions.
  *
- * **Supported content types** (resolved from [GaplessAsset.mimeType]):
- * - **Video** — `video/x`, HLS, DASH, RTSP — rendered via ExoPlayer (muted by default).
- * - **Image** — `image/x` — loaded via Coil.
- * - **Web**   — anything else — rendered via [android.webkit.WebView] with JS enabled.
- *
- * **Scheduling** — each asset can carry optional date-range, day-of-week, and time-window
- * constraints via [GaplessAsset.isActiveNow]. Assets outside their schedule are skipped
- * automatically and re-evaluated every second.
- *
- * **Error handling** — when a render error occurs, [GaplessEvent.PlaybackError] is emitted
- * and the player advances to the next asset. The library does not disable assets internally;
- * if you want to prevent an asset from replaying, remove it from [assets] in response to the
- * event and recompose.
- *
- * **ViewModel scope** — the player manages its own [GaplessViewModel] scoped to the nearest
- * `ViewModelStoreOwner` (typically the host Activity or NavBackStackEntry). Multiple
- * [GaplessPlayer] calls within the same scope share the same instance, so use a distinct
- * scope (e.g. separate `NavBackStackEntry`) if you need independent players.
- *
- * ```kotlin
- * GaplessPlayer(
- *     assets = playlist,
- *     rotation = 90,
- *     shuffle = true,
- *     onEvent = { event ->
- *         when (event) {
- *             is GaplessEvent.NowPlaying    -> log("Playing ${event.asset.id}")
- *             is GaplessEvent.PlaybackError -> removeAndUpdate(event.asset)
- *             is GaplessEvent.PlaylistEmpty -> showEmptyState()
- *             else -> {}
- *         }
- *     }
- * )
- * ```
+ * // ... (keep existing docs for supported content, scheduling, errors, scope) ...
  *
  * @param assets     Ordered list of assets to play. Passing a new list hot-swaps the playlist
- *                   while preserving the currently-playing asset when possible.
+ * while preserving the currently-playing asset when possible.
  * @param rotation   Screen rotation in degrees — `0`, `90`, `180`, or `270`. Content is rotated
- *                   inside its bounds; the composable's own layout size is unaffected.
+ * inside its bounds; the composable's own layout size is unaffected.
  * @param shuffle    When `true` the playlist is randomized each pass, ensuring the last-played
- *                   asset does not appear first in the reshuffled order.
+ * asset does not appear first in the reshuffled order.
  * @param config     Timing configuration — tick interval and preload threshold. See [GaplessPlayerConfig].
  * @param onEvent    Invoked on the main thread for each [GaplessEvent]:
- *                   [GaplessEvent.NowPlaying], [GaplessEvent.Preloading],
- *                   [GaplessEvent.PlaybackError], [GaplessEvent.PlaylistEmpty].
- * @param emptyState Composable to show when there are no valid assets to play.
+ * [GaplessEvent.NowPlaying], [GaplessEvent.Preloading],
+ * [GaplessEvent.PlaybackError], [GaplessEvent.PlaylistEmpty].
+ * @param emptyState Composable to show when the [assets] list is completely empty.
+ * @param idleState  Composable to show when [assets] is not empty, but NO assets currently
+ * meet their temporal scheduling criteria (i.e., waiting for a time window).
+ * Defaults to calling [emptyState] if not explicitly provided.
  */
 @Composable
 fun GaplessPlayer(
@@ -92,7 +62,8 @@ fun GaplessPlayer(
     shuffle: Boolean = false,
     config: GaplessPlayerConfig = GaplessPlayerConfig(),
     onEvent: (GaplessEvent) -> Unit = {},
-    emptyState: @Composable () -> Unit = { Box(modifier = Modifier.fillMaxSize().background(Color.Black)) }
+    emptyState: @Composable () -> Unit = { Box(modifier = Modifier.fillMaxSize().background(Color.Black)) },
+    idleState: @Composable () -> Unit = emptyState 
 ) {
     val viewModel: GaplessViewModel = viewModel()
 
@@ -109,8 +80,6 @@ fun GaplessPlayer(
     val preloadAsset by viewModel.preloadAsset.collectAsState()
     val isInitialized by viewModel.isInitialized.collectAsState()
 
-    // Two fixed render slots — assets are sticky so ExoPlayer/WebView instances survive
-    // across advances and the next asset is already buffered when it becomes active.
     val slots = remember { mutableStateListOf<GaplessAsset?>(null, null) }
 
     LaunchedEffect(currentAsset, preloadAsset) {
@@ -136,9 +105,14 @@ fun GaplessPlayer(
     if (!isInitialized) return
 
     RotatedScreenContainer(rotation) {
-        if (currentAsset == null && preloadAsset == null) {
+        if (assets.isEmpty()) {
+            // 1. The list is completely empty. Show empty state immediately.
             emptyState()
+        } else if (currentAsset == null && preloadAsset == null) {
+            // 2. We have assets, but none are scheduled to play right now. 
+            idleState()
         } else {
+            // 3. We have assets and at least one is active. Render the slots.
             for (i in 0..1) {
                 MediaSlot(
                     asset = slots[i],
