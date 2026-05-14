@@ -25,7 +25,7 @@ Add the dependency to your `build.gradle.kts`:
 
 ```kotlin
 dependencies {
-    implementation("io.github.514sid:gapless:0.0.11")
+    implementation("io.github.514sid:gapless:0.0.12")
 }
 ```
 
@@ -99,7 +99,7 @@ The primary data unit describing a single piece of media.
 | `id` | `String` | — | Stable unique identifier. Used to preserve playback state across playlist hot-swaps. |
 | `uri` | `String` | — | Local file path, `content://` URI, or remote URL. Bare paths are automatically prefixed with `file://`. |
 | `mimeType` | `String` | — | Determines the renderer. `video/*` and streaming MIME types → ExoPlayer; `image/*` → Coil; anything else → WebView. |
-| `durationMs` | `Long` | `10_000` | How long to display the asset, in milliseconds. |
+| `durationMs` | `Long` | `10_000` | How long to display the asset, in milliseconds. The engine snaps this value down to the nearest `tickIntervalMs` boundary, so the effective duration is `floor(durationMs / tickIntervalMs) * tickIntervalMs`. |
 | `width` | `Int?` | `null` | Optional intrinsic width hint. When both `width` and `height` are set, used to compute the aspect ratio before the first video frame is decoded. |
 | `height` | `Int?` | `null` | Optional intrinsic height hint. |
 | `startDate` | `Long?` | `null` | Epoch-millisecond timestamp. The asset will not play before this time. |
@@ -145,7 +145,7 @@ Fine-tune playback engine timing:
 
 | Property | Default | Description |
 | :--- | :--- | :--- |
-| `tickIntervalMs` | `1_000` | How often the engine checks elapsed time and schedule validity, in milliseconds. Lower values are more precise but consume more CPU. |
+| `tickIntervalMs` | `1_000` | How often the engine checks elapsed time and schedule validity, in milliseconds. Lower values are more precise but consume more CPU. Also determines the snapping granularity for asset durations — each asset plays for the largest multiple of `tickIntervalMs` that fits within its `durationMs`. |
 | `preloadThresholdMs` | `5_000` | How many milliseconds before the current asset ends the next one starts buffering. Increase on slow storage or network. |
 
 ```kotlin
@@ -182,7 +182,7 @@ GaplessPlayer(
 
 1. `PlaylistManager` runs a coroutine tick loop. Each tick it increments elapsed time and checks schedule validity.
 2. When remaining time drops below `preloadThresholdMs`, the next asset is assigned to the inactive slot and starts buffering.
-3. When the current asset's `durationMs` elapses (or its schedule expires), the slots swap: the preloaded slot becomes active and the old one is released.
+3. When the current asset's snapped duration elapses (or its schedule expires), the slots swap: the preloaded slot becomes active and the old one is released. The snapped duration is `floor(durationMs / tickIntervalMs) * tickIntervalMs`, ensuring advancement always lands on an exact tick boundary.
 4. Slot visibility is controlled via `graphicsLayer { alpha }` — both slots exist in the composition at all times, avoiding recomposition on every transition.
 5. `GaplessViewModel` bridges `PlaylistManager` state flows to Compose state and forwards `Started`/`Finished`/`Preloading` events to the caller.
 
