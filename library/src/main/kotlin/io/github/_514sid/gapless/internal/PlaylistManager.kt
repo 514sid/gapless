@@ -47,7 +47,7 @@ internal class PlaylistManager {
 
         val newElapsed = currentElapsedMs + config.tickIntervalMs
 
-        if (newElapsed >= current.durationMs) {
+        if (newElapsed >= current.snappedDuration(config.tickIntervalMs)) {
             advance()
         } else {
             currentElapsedMs = newElapsed
@@ -90,7 +90,7 @@ internal class PlaylistManager {
     }
 
     private fun schedulePreload(current: GaplessAsset) {
-        val remaining = current.durationMs - currentElapsedMs
+        val remaining = current.snappedDuration(config.tickIntervalMs) - currentElapsedMs
 
         val next = if (remaining < config.preloadThresholdMs) {
             findNextActive(_playlist.value, current.id)
@@ -173,6 +173,11 @@ internal class PlaylistManager {
         } else {
             shuffled
         }
+    }
+
+    private fun GaplessAsset.snappedDuration(tickMs: Long): Long {
+        val snapped = (durationMs / tickMs) * tickMs
+        return maxOf(snapped, tickMs)
     }
 
     private fun findNextActive(
