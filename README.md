@@ -21,11 +21,41 @@ A self-contained gapless media player Composable for Android. Transitions seamle
 
 ## Installation
 
-Add the dependency to your `build.gradle.kts`:
+### Maven Central
 
 ```kotlin
 dependencies {
     implementation("io.github.514sid:gapless:0.0.13")
+}
+```
+
+### GitHub Packages
+
+```kotlin
+repositories {
+    maven {
+        url = uri("https://maven.pkg.github.com/514sid/gapless")
+        credentials {
+            username = System.getenv("GITHUB_ACTOR")
+            password = System.getenv("GITHUB_TOKEN")
+        }
+    }
+}
+
+dependencies {
+    implementation("io.github.514sid:gapless:0.0.13")
+}
+```
+
+### JitPack
+
+```kotlin
+repositories {
+    maven { url = uri("https://jitpack.io") }
+}
+
+dependencies {
+    implementation("com.github.514sid:gapless:v0.0.13")
 }
 ```
 
