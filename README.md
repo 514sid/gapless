@@ -25,7 +25,7 @@ Add the dependency to your `build.gradle.kts`:
 
 ```kotlin
 dependencies {
-    implementation("io.github.514sid:gapless:0.0.12")
+    implementation("io.github.514sid:gapless:0.0.13")
 }
 ```
 
