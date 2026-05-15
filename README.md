@@ -166,8 +166,9 @@ Events emitted via the `onEvent` callback:
 | :--- | :--- | :--- |
 | `Started` | `asset`, `playbackId` | Fired when an asset starts playing. `playbackId` is a unique UUID per play instance. |
 | `Finished` | `asset`, `playbackId` | Fired when an asset finishes (reaches its `durationMs`). |
-| `Preloading` | `asset` | Fired when the next asset begins buffering, typically ~5 s before the current one ends. |
+| `Preloading` | `asset` (`GaplessAsset?`) | Fired when the next asset begins buffering, typically ~5 s before the current one ends. `asset` is `null` when there is nothing to preload (e.g. single-item playlist). |
 | `PlaybackError` | `asset`, `message` | Fired on renderer failure. The player automatically skips the failing asset for the current session. |
+| `Idle` | — | Fired when there is nothing to play — either the playlist is empty, or no asset currently meets its scheduling criteria. |
 
 ---
 
