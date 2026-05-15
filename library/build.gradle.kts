@@ -7,6 +7,7 @@ plugins {
 
 android {
     namespace = "io.github._514sid.gapless"
+    testNamespace = "io.github.gapless.test"
     compileSdk = libs.versions.compileSdk.get().toInt()
 
     defaultConfig {
@@ -48,10 +49,34 @@ dependencies {
     testImplementation(platform(libs.junit.bom))
     testImplementation(libs.junit.jupiter)
     testRuntimeOnly(libs.junit.platform.launcher)
+
+    androidTestImplementation(libs.androidx.test.runner)
+    androidTestImplementation(libs.androidx.test.ext.junit)
 }
 
 tasks.withType<Test> {
     useJUnitPlatform()
+}
+
+// AGP 9 does not honour testNamespace for library modules, so the test manifest gets
+// the invalid package "io.github._514sid.gapless.test" (underscore-led segment).
+// Patch it after the manifest merge task runs.
+tasks.configureEach {
+    if (name == "processDebugAndroidTestManifest") {
+        doLast {
+            val manifest = layout.buildDirectory.file(
+                "intermediates/packaged_manifests/debugAndroidTest/processDebugAndroidTestManifest/AndroidManifest.xml"
+            ).get().asFile
+            if (manifest.exists()) {
+                manifest.writeText(
+                    manifest.readText().replace(
+                        "io.github._514sid.gapless",
+                        "io.github.gapless514sid"
+                    )
+                )
+            }
+        }
+    }
 }
 
 afterEvaluate {
