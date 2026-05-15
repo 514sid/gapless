@@ -31,6 +31,8 @@ dependencies {
 
 ### GitHub Packages
 
+> Requires a GitHub token even for public packages — prefer Maven Central or JitPack for most cases.
+
 ```kotlin
 repositories {
     maven {
