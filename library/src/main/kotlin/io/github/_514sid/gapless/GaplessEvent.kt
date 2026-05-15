@@ -9,10 +9,13 @@ sealed class GaplessEvent {
     /** Fired whenever an asset finishes playing (reaches its duration). */
     data class Finished(val asset: GaplessAsset, val playbackId: UUID) : GaplessEvent()
 
-    /** Fired when an asset is queued for preload (typically ~5 s before the current one ends). */
-    data class Preloading(val asset: GaplessAsset) : GaplessEvent()
+    /** Fired when an asset is queued for preload (typically ~5 s before the current one ends), or null if there is nothing to preload. */
+    data class Preloading(val asset: GaplessAsset?) : GaplessEvent()
 
     /** Fired when a video, image, or web asset fails to render. The asset is automatically
      *  removed from the playlist for the current session. */
     data class PlaybackError(val asset: GaplessAsset, val message: String) : GaplessEvent()
+
+    /** Fired when there is nothing to play (e.g. playlist is empty or nothing is scheduled yet). */
+    object Idle : GaplessEvent()
 }

@@ -39,10 +39,10 @@ internal class GaplessViewModel(app: Application) : AndroidViewModel(app) {
                         )
                     }
 
-                    state?.asset?.let { asset ->
-                        _events.tryEmit(
-                            GaplessEvent.Started(asset, state.playbackId)
-                        )
+                    if (state?.asset != null) {
+                        _events.tryEmit(GaplessEvent.Started(state.asset, state.playbackId))
+                    } else {
+                        _events.tryEmit(GaplessEvent.Idle)
                     }
                 }
 
@@ -51,12 +51,9 @@ internal class GaplessViewModel(app: Application) : AndroidViewModel(app) {
             .launchIn(viewModelScope)
 
         preloadSlot
-            .filterNotNull()
-            .distinctUntilChanged { old, new -> old.asset?.id == new.asset?.id && old.playbackId == new.playbackId }
+            .distinctUntilChanged { old, new -> old?.asset?.id == new?.asset?.id && old?.playbackId == new?.playbackId }
             .onEach { state ->
-                state.asset?.let {
-                    _events.tryEmit(GaplessEvent.Preloading(it))
-                }
+                _events.tryEmit(GaplessEvent.Preloading(state?.asset))
             }
             .launchIn(viewModelScope)
     }
