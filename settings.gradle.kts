@@ -19,3 +19,4 @@ dependencyResolutionManagement {
 
 rootProject.name = "gapless"
 include(":library")
+include(":app")
