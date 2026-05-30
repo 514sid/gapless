@@ -40,6 +40,33 @@ data class GaplessAsset(
     val playTimeTo: String? = null,
     val refreshIntervalMs: Long? = null,
 ) {
+    constructor(
+        id: Int,
+        uri: String,
+        mimeType: String,
+        durationMs: Long = 10_000L,
+        width: Int? = null,
+        height: Int? = null,
+        startDate: Long? = null,
+        endDate: Long? = null,
+        playDays: Set<DayOfWeek>? = null,
+        playTimeFrom: String? = null,
+        playTimeTo: String? = null,
+        refreshIntervalMs: Long? = null,
+    ) : this(
+        id = id.toString(),
+        uri = uri,
+        mimeType = mimeType,
+        durationMs = durationMs,
+        width = width,
+        height = height,
+        startDate = startDate,
+        endDate = endDate,
+        playDays = playDays,
+        playTimeFrom = playTimeFrom,
+        playTimeTo = playTimeTo,
+        refreshIntervalMs = refreshIntervalMs,
+    )
     companion object {
         private val TIME_FORMATTER = DateTimeFormatter.ofPattern("HH:mm[:ss]")
         private const val MIME_PREFIX_VIDEO = "video/"

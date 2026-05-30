@@ -1,7 +1,7 @@
 [versions]
 agp            = "9.2.1"
 kotlin         = "2.3.21"
-compileSdk     = "36"
+compileSdk     = "37"
 minSdk         = "26"
 composeBom     = "2026.05.00"
 lifecycle      = "2.10.0"
