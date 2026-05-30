@@ -59,7 +59,7 @@ tasks.withType<Test> {
     useJUnitPlatform()
 }
 
-// AGP 9 does not honour testNamespace for library modules, so the test manifest gets
+// AGP 9 does not honor testNamespace for library modules, so the test manifest gets
 // the invalid package "io.github._514sid.gapless.test" (underscore-led segment).
 // Patch it after the manifest merge task runs.
 tasks.configureEach {

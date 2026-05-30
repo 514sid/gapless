@@ -3,19 +3,16 @@ package io.github._514sid.gapless
 import java.util.UUID
 
 sealed class GaplessEvent {
-    /** Fired whenever a new asset starts playing. */
-    data class Started(val asset: GaplessAsset, val playbackId: UUID) : GaplessEvent()
+    abstract val timestamp: Long
 
-    /** Fired whenever an asset finishes playing (reaches its duration). */
-    data class Finished(val asset: GaplessAsset, val playbackId: UUID) : GaplessEvent()
+    data class Started(val asset: GaplessAsset, val playbackId: UUID, override val timestamp: Long = System.currentTimeMillis()) : GaplessEvent()
+    data class Ended(val asset: GaplessAsset, val playbackId: UUID, override val timestamp: Long = System.currentTimeMillis()) : GaplessEvent()
+    data class PlaybackError(val asset: GaplessAsset, val playbackId: UUID, val message: String, override val timestamp: Long = System.currentTimeMillis()) : GaplessEvent()
+    data class Preloading(val asset: GaplessAsset, override val timestamp: Long = System.currentTimeMillis()) : GaplessEvent()
 
-    /** Fired when an asset is queued for preload (typically ~5 s before the current one ends), or null if there is nothing to preload. */
-    data class Preloading(val asset: GaplessAsset?) : GaplessEvent()
+    /** No assets were passed to the manager. */
+    data class Empty(override val timestamp: Long = System.currentTimeMillis()) : GaplessEvent()
 
-    /** Fired when a video, image, or web asset fails to render. The asset is automatically
-     *  removed from the playlist for the current session. */
-    data class PlaybackError(val asset: GaplessAsset, val message: String) : GaplessEvent()
-
-    /** Fired when there is nothing to play (e.g. playlist is empty or nothing is scheduled yet). */
-    object Idle : GaplessEvent()
+    /** Assets exist but none currently satisfies its scheduling constraints. */
+    data class Idle(override val timestamp: Long = System.currentTimeMillis()) : GaplessEvent()
 }
