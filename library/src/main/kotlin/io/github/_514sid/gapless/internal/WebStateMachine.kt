@@ -187,6 +187,8 @@ internal class WebStateMachine(
         Log.d(TAG, "createWebView(): Instantiating $slotIdentifier")
         setBackgroundColor(android.graphics.Color.BLACK)
 
+        setInitialScale(100)
+
         webViewClient = object : WebViewClient() {
             override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
                 Log.d(TAG, "${view.slotName()} redirecting to: ${request.url}")
