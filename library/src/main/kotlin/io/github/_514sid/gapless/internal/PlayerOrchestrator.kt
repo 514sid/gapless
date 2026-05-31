@@ -37,6 +37,11 @@ internal class PlayerOrchestrator(
         }
     }
 
+    fun updateContainerSize(width: Int, height: Int) {
+        image.containerWidth = width
+        image.containerHeight = height
+    }
+
     private fun prepare(item: PlaybackItem) {
         when (item) {
             is PlaybackItem.Video -> {
