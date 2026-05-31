@@ -1,6 +1,7 @@
 package io.github._514sid.gapless.internal
 
 import android.content.Context
+import androidx.annotation.MainThread
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -12,80 +13,82 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 
+@MainThread
 internal class ImageStateMachine(
     private val context: Context,
-    private val scope: CoroutineScope
+    private val scope: CoroutineScope,
+    private val loadImage: suspend (model: Any, width: Int, height: Int) -> Unit = { model, w, h ->
+        context.imageLoader.execute(
+            ImageRequest.Builder(context)
+                .data(model)
+                .size(w, h)
+                .allowHardware(true)
+                .build()
+        )
+    }
 ) {
+    companion object {
+        private const val UHD_LONG_SIDE = 3840
+        private const val UHD_SHORT_SIDE = 2160
+    }
 
     var renderState by mutableStateOf(ImagePlayerState())
         private set
 
+    var containerWidth: Int = 0
+    var containerHeight: Int = 0
+
     private var prepareJob: Job? = null
     private var pendingItem: PlaybackItem.Image? = null
 
-    /**
-     * Preload [item] into the inactive slot via Coil.
-     * Cancels any previous in-flight preload.
-     */
+    private val inactiveSlot: Int
+        get() = if (renderState.activeSlot == 0) 1 else 0
+
     fun prepare(item: PlaybackItem.Image) {
         prepareJob?.cancel()
         pendingItem = item
 
-        val targetSlot = nextSlot()
-
-        // Pre-populate the slot so the composable reflects the pending image immediately
-        // even if Coil has not finished downloading yet.
         renderState = renderState.setSlot(
-            slot = targetSlot,
-            value = ImageSlotState(item.model, item.targetAspectRatio)
+            slot = inactiveSlot,
+            value = ImageSlotState(item.model)
         )
 
+        val isPortrait = containerHeight > containerWidth
+        val maxW = if (isPortrait) UHD_SHORT_SIDE else UHD_LONG_SIDE
+        val maxH = if (isPortrait) UHD_LONG_SIDE else UHD_SHORT_SIDE
+
+        val targetW = if (containerWidth > 0) containerWidth.coerceAtMost(maxW) else maxW
+        val targetH = if (containerHeight > 0) containerHeight.coerceAtMost(maxH) else maxH
+
         prepareJob = scope.launch(Dispatchers.IO.limitedParallelism(1)) {
-            context.imageLoader.enqueue(
-                ImageRequest.Builder(context)
-                    .data(item.model)
-                    .allowHardware(false)
-                    .build()
-            )
+            loadImage(item.model, targetW, targetH)
         }
     }
 
-    /**
-     * Make [item] visible.
-     *
-     * If [item] was the pending prepare, flips to the already-loaded slot.
-     * Otherwise, cancels the pending prepare, stages [item] inline, and shows it.
-     */
     fun play(item: PlaybackItem.Image) {
         prepareJob?.cancel()
         prepareJob = null
 
-        val targetSlot = if (pendingItem?.playbackId == item.playbackId) {
-            nextSlot()
-        } else {
-            val slot = nextSlot()
+        val target = inactiveSlot
+
+        if (pendingItem?.playbackId != item.playbackId) {
             renderState = renderState.setSlot(
-                slot = slot,
-                value = ImageSlotState(item.model, item.targetAspectRatio)
+                slot = target,
+                value = ImageSlotState(item.model)
             )
-            slot
         }
 
-        renderState = renderState.copy(activeSlot = targetSlot)
+        renderState = renderState.copy(activeSlot = target)
         pendingItem = null
     }
 
-    /** Cancel the in-flight preload and remove the staged slot without affecting the active slot. */
     fun cancelPrepare() {
         prepareJob?.cancel()
         prepareJob = null
-        val stagedSlot = nextSlot()
-        renderState = if (stagedSlot == 0) renderState.copy(slotA = null)
-                      else renderState.copy(slotB = null)
+        renderState = renderState.setSlot(slot = inactiveSlot, value = null)
         pendingItem = null
     }
 
-    /** Clear both slots and cancel any in-flight preload. */
     fun clear() {
         prepareJob?.cancel()
         prepareJob = null
@@ -93,8 +96,6 @@ internal class ImageStateMachine(
         renderState = ImagePlayerState()
     }
 
-    private fun nextSlot() = if (renderState.activeSlot == 0) 1 else 0
-
-    private fun ImagePlayerState.setSlot(slot: Int, value: ImageSlotState) =
+    private fun ImagePlayerState.setSlot(slot: Int, value: ImageSlotState?) =
         if (slot == 0) copy(slotA = value) else copy(slotB = value)
 }

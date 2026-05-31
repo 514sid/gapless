@@ -2,133 +2,247 @@ package io.github._514sid.gapless.internal
 
 import android.annotation.SuppressLint
 import android.content.Context
+import android.util.Log
+import android.webkit.CookieManager
+import android.webkit.WebChromeClient
 import android.webkit.WebResourceError
 import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
+import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import androidx.annotation.MainThread
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeout
 
+@MainThread
 @SuppressLint("SetJavaScriptEnabled")
 internal class WebStateMachine(
     private val context: Context,
-    private val scope: CoroutineScope
+    private val scope: CoroutineScope,
+    enableChromeDebugging: Boolean = true,
+    var onError: ((String) -> Unit)? = null
 ) {
-    // WebViewA is always present. WebViewB is created lazily for the second
-    // slot and destroyed as soon as a web-to-web transition is no longer needed.
-    val webViewA: WebView = createWebView()
+    companion object {
+        private const val TAG = "WebStateMachine"
+        private const val BLANK_PAGE =
+            "<html><head><style>body { background-color: black; margin: 0; padding: 0; }</style></head><body></body></html>"
+
+        private const val DESKTOP_USER_AGENT =
+            "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36"
+    }
+
+    init {
+        if (enableChromeDebugging) {
+            WebView.setWebContentsDebuggingEnabled(true)
+            Log.d(TAG, "WebView remote debugging enabled via Chrome.")
+        }
+    }
+
+    val webViewA: WebView = createWebView("Slot A")
+    val webViewB: WebView = createWebView("Slot B")
 
     var renderState by mutableStateOf(
-        WebPlayerState(webViewA = webViewA, webViewB = null, activeSlot = 0)
+        WebPlayerState(webViewA = webViewA, webViewB = webViewB, activeSlot = 0)
     )
         private set
 
     private var pendingItem: PlaybackItem.Web? = null
+    private var transitionJob: Job? = null
+    private var refreshJob: Job? = null
+    private var commitDeferred: CompletableDeferred<Unit>? = null
 
-    /**
-     * Start loading [item]'s URL into the inactive slot.
-     * Cancels any previous pending prepare.
-     */
+    private val inactiveSlot: Int
+        get() = if (renderState.activeSlot == 0) 1 else 0
+
+    private val inactiveWebView: WebView
+        get() = if (renderState.activeSlot == 0) webViewB else webViewA
+
+    private fun WebView.slotName(): String = if (this === webViewA) "Slot A" else "Slot B"
+
     fun prepare(item: PlaybackItem.Web) {
+        transitionJob?.cancel()
+        refreshJob?.cancel()
+
+        commitDeferred = CompletableDeferred()
         pendingItem = item
-        val targetView = getOrCreateInactiveView()
-        scope.launch { targetView.loadUrl(item.url) }
+
+        val targetView = inactiveWebView
+        Log.d(TAG, "prepare(): Preloading URL into ${targetView.slotName()} -> ${item.url}")
+        targetView.post { targetView.loadUrl(item.url) }
     }
 
-    /**
-     * Make [item] visible.
-     *
-     * If [item] matches the pending prepare the already-loaded slot is flipped.
-     * Otherwise, the item is loaded inline and shown immediately.
-     */
     fun play(item: PlaybackItem.Web) {
-        val targetSlot = if (pendingItem?.playbackId == item.playbackId) {
-            nextSlot()
-        } else {
-            val slot = nextSlot()
-            val targetView = if (slot == 1) getOrCreateWebViewB() else webViewA
-            scope.launch { targetView.loadUrl(item.url) }
-            slot
+        transitionJob?.cancel()
+        refreshJob?.cancel()
+
+        val target = inactiveSlot
+
+        if (pendingItem?.playbackId != item.playbackId) {
+            Log.w(TAG, "play(): Item was NOT pending! Forcing immediate load.")
+            commitDeferred = CompletableDeferred()
+            val targetView = inactiveWebView
+            targetView.post { targetView.loadUrl(item.url) }
         }
 
-        renderState = renderState.copy(activeSlot = targetSlot)
         pendingItem = null
 
-        // Prefer B: when B is active, A has no role → blank it.
-        // When A is active (unavoidable during alternation), B is unused → kill it.
-        // Either way only one WebView holds content until the next web-to-web prepare.
-        if (targetSlot == 1) {
-            webViewA.loadUrl("about:blank")
-        } else {
-            renderState.webViewB?.destroy()
-            renderState = renderState.copy(webViewB = null)
-        }
-    }
+        transitionJob = scope.launch {
+            Log.d(TAG, "play(): Waiting for page to visually commit before swapping...")
 
-    /** Cancel the pending URL load and destroy the inactive WebView without changing the active slot. */
-    fun cancelPrepare() {
-        pendingItem = null
-        val inactiveSlot = nextSlot()
-        if (inactiveSlot == 1) {
-            renderState.webViewB?.let {
-                it.destroy()
-                renderState = renderState.copy(webViewB = null)
+            try {
+                withTimeout(5000) { commitDeferred?.await() }
+                Log.d(TAG, "play(): Pixels painted! Swapping instantly to slot $target.")
+            } catch (e: Exception) {
+                Log.w(TAG, "play(): Force swapping! Wait failed or timed out: ${e.message}")
             }
-        } else {
-            webViewA.loadUrl("about:blank")
+
+            renderState = renderState.copy(activeSlot = target)
+
+            delay(150)
+            if (renderState.activeSlot == target) {
+                inactiveWebView.loadBlank()
+            }
+
+            if (item.refreshIntervalMs > 0L) {
+                startSeamlessRefreshLoop(item)
+            }
         }
     }
 
-    /**
-     * Hide web content and destroy WebViewB to free memory.
-     * Stops web content and destroys WebViewB to free memory when a non-web asset takes over.
-     */
-    fun clear() {
+    private fun startSeamlessRefreshLoop(item: PlaybackItem.Web) {
+        Log.d(TAG, "Refresh loop started. Interval: ${item.refreshIntervalMs}ms")
+
+        refreshJob = scope.launch {
+            while (true) {
+                delay(item.refreshIntervalMs)
+
+                if (pendingItem != null) break
+
+                val target = inactiveSlot
+                val targetView = inactiveWebView
+
+                Log.d(TAG, "Refresh triggered: Preloading ${item.url} into ${targetView.slotName()}")
+                commitDeferred = CompletableDeferred()
+                targetView.post { targetView.loadUrl(item.url) }
+
+                try {
+                    withTimeout(5000) { commitDeferred?.await() }
+
+                    if (pendingItem != null) break
+
+                    Log.d(TAG, "Refresh ready! Swapping instantly to slot $target.")
+                    renderState = renderState.copy(activeSlot = target)
+
+                    delay(150)
+                    if (renderState.activeSlot == target) {
+                        inactiveWebView.loadBlank()
+                    }
+                } catch (_: Exception) {
+                    Log.w(TAG, "Refresh failed or timed out. Keeping current page visible.")
+                    inactiveWebView.loadBlank()
+                }
+            }
+        }
+    }
+
+    fun cancelPrepare() {
+        Log.d(TAG, "cancelPrepare(): Aborting pending load.")
+        transitionJob?.cancel()
+        refreshJob?.cancel()
+        commitDeferred?.cancel()
         pendingItem = null
-        renderState.webViewB?.destroy()
-        renderState = renderState.copy(webViewB = null, activeSlot = 0)
+        inactiveWebView.loadBlank()
+    }
+
+    fun clear() {
+        Log.d(TAG, "clear(): Blanking both slots and resetting state.")
+        transitionJob?.cancel()
+        refreshJob?.cancel()
+        commitDeferred?.cancel()
+        pendingItem = null
+        webViewA.loadBlank()
+        webViewB.loadBlank()
+        renderState = renderState.copy(activeSlot = 0)
     }
 
     fun release() {
+        Log.d(TAG, "release(): Destroying WebViews to free memory.")
+        transitionJob?.cancel()
+        refreshJob?.cancel()
+        commitDeferred?.cancel()
         clear()
         webViewA.destroy()
+        webViewB.destroy()
     }
 
-    private fun nextSlot() = if (renderState.activeSlot == 0) 1 else 0
+    private fun createWebView(slotIdentifier: String) = WebView(context).apply {
+        Log.d(TAG, "createWebView(): Instantiating $slotIdentifier")
+        setBackgroundColor(android.graphics.Color.BLACK)
 
-    private fun getOrCreateInactiveView(): WebView {
-        return if (nextSlot() == 1) getOrCreateWebViewB() else webViewA
-    }
-
-    private fun getOrCreateWebViewB(): WebView =
-        renderState.webViewB ?: createWebView().also {
-            renderState = renderState.copy(webViewB = it)
-        }
-
-    private fun createWebView() = WebView(context).apply {
         webViewClient = object : WebViewClient() {
-            override fun onReceivedError(
-                view: WebView,
-                request: WebResourceRequest,
-                error: WebResourceError
-            ) {
-                if (request.isForMainFrame) view.loadUrl("about:blank")
+            override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
+                Log.d(TAG, "${view.slotName()} redirecting to: ${request.url}")
+                return false
             }
 
-            override fun onReceivedHttpError(
-                view: WebView,
-                request: WebResourceRequest,
-                errorResponse: WebResourceResponse
-            ) {
-                if (request.isForMainFrame) view.loadUrl("about:blank")
+            override fun onPageCommitVisible(view: WebView, url: String) {
+                super.onPageCommitVisible(view, url)
+                if (!url.startsWith("data:text/html")) {
+                    Log.i(TAG, "onPageCommitVisible(): ${view.slotName()} has successfully painted pixels! -> $url")
+                    if (view === inactiveWebView) {
+                        commitDeferred?.complete(Unit)
+                    }
+                }
+            }
+
+            override fun onReceivedError(view: WebView, request: WebResourceRequest, error: WebResourceError) {
+                if (request.isForMainFrame) {
+                    val message = "Web Error on ${view.slotName()}: ${error.description}"
+                    Log.e(TAG, message)
+                    commitDeferred?.completeExceptionally(Exception(message))
+                    onError?.invoke(message)
+                    view.loadBlank()
+                }
+            }
+
+            override fun onReceivedHttpError(view: WebView, request: WebResourceRequest, errorResponse: WebResourceResponse) {
+                if (request.isForMainFrame) {
+                    val message = "HTTP Error on ${view.slotName()}: ${errorResponse.statusCode}"
+                    Log.e(TAG, message)
+                    commitDeferred?.completeExceptionally(Exception(message))
+                    onError?.invoke(message)
+                    view.loadBlank()
+                }
             }
         }
-        settings.javaScriptEnabled = true
-        settings.domStorageEnabled = true
-        loadUrl("about:blank")
+
+        webChromeClient = WebChromeClient()
+
+        CookieManager.getInstance().setAcceptThirdPartyCookies(this, true)
+
+        settings.apply {
+            javaScriptEnabled = true
+            domStorageEnabled = true
+            mediaPlaybackRequiresUserGesture = false
+            setSupportMultipleWindows(false)
+            mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
+            useWideViewPort = true
+            loadWithOverviewMode = true
+            userAgentString = DESKTOP_USER_AGENT
+        }
+
+        loadBlank()
+    }
+
+    private fun WebView.loadBlank() {
+        this.loadData(BLANK_PAGE, "text/html", "UTF-8")
     }
 }

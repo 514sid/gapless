@@ -26,7 +26,10 @@ internal sealed class PlaybackItem {
         override val height: Int
     ) : PlaybackItem()
 
-    data class Web(val url: String) : PlaybackItem() {
+    data class Web(
+        val url: String,
+        val refreshIntervalMs: Long = 0L
+    ) : PlaybackItem() {
         override val width = 0
         override val height = 0
     }

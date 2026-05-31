@@ -4,6 +4,10 @@ import android.os.Bundle
 import android.os.PowerManager
 import android.util.Log
 import android.view.WindowManager
+import android.webkit.ServiceWorkerClient
+import android.webkit.ServiceWorkerController
+import android.webkit.WebResourceRequest
+import android.webkit.WebResourceResponse
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
@@ -35,6 +39,14 @@ class PlayerActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        ServiceWorkerController.getInstance().apply {
+            serviceWorkerWebSettings.allowContentAccess = true
+            serviceWorkerWebSettings.allowFileAccess = true
+            setServiceWorkerClient(object : ServiceWorkerClient() {
+                override fun shouldInterceptRequest(request: WebResourceRequest): WebResourceResponse? = null
+            })
+        }
 
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         val powerManager = getSystemService(PowerManager::class.java)

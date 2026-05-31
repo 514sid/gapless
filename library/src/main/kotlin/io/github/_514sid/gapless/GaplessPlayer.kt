@@ -16,6 +16,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.layout.onSizeChanged
 import io.github._514sid.gapless.internal.ActiveContent
 import io.github._514sid.gapless.internal.ImagePlayer
 import io.github._514sid.gapless.internal.PlayerOrchestrator
@@ -77,7 +78,11 @@ fun GaplessPlayer(
         }
     }
 
-    Box(modifier = modifier) {
+    Box(
+        modifier = modifier.onSizeChanged { size ->
+            orchestrator.updateContainerSize(size.width, size.height)
+        }
+    ) {
         RotatedContainer(rotation = rotation.degrees) {
             val active = orchestrator.activeContent
 

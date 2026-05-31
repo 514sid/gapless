@@ -238,6 +238,29 @@ Place raw video files under `app/src/main/res/raw/`.
 
 ---
 
+## Web Page Support
+
+Web assets use Android WebView and work out of the box for most sites. For **PWAs and service-worker-dependent pages** (common in digital signage platforms), you must configure `ServiceWorkerController` before any `WebView` is created in your process. Add this to your `Activity.onCreate()` or `Application.onCreate()`:
+
+```kotlin
+import android.webkit.ServiceWorkerClient
+import android.webkit.ServiceWorkerController
+import android.webkit.WebResourceRequest
+import android.webkit.WebResourceResponse
+
+ServiceWorkerController.getInstance().apply {
+    serviceWorkerWebSettings.allowContentAccess = true
+    serviceWorkerWebSettings.allowFileAccess = true
+    setServiceWorkerClient(object : ServiceWorkerClient() {
+        override fun shouldInterceptRequest(request: WebResourceRequest): WebResourceResponse? = null
+    })
+}
+```
+
+Without this, service workers will fail to make network requests and the page will appear to load but never display content.
+
+---
+
 ## How It Works
 
 Each media type uses a different strategy to eliminate the gap:
