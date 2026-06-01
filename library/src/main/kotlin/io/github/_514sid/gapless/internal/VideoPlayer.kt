@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
@@ -15,7 +16,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.viewinterop.AndroidView
-import androidx.compose.ui.zIndex
 
 internal data class VideoPlayerState(
     val aspectRatio: Float? = null,
@@ -24,15 +24,14 @@ internal data class VideoPlayerState(
 
 @Composable
 internal fun VideoPlayer(
-    textureView: TextureView,
     state: VideoPlayerState,
+    onTextureViewCreated: (TextureView) -> Unit,
     modifier: Modifier = Modifier
 ) {
     Box(modifier = modifier, contentAlignment = Alignment.Center) {
 
         Box(
             modifier = Modifier
-                .zIndex(0f)
                 .then(
                     if (state.aspectRatio != null)
                         Modifier.aspectRatio(state.aspectRatio)
@@ -42,14 +41,28 @@ internal fun VideoPlayer(
                 .clipToBounds()
         ) {
             AndroidView(
-                factory = { textureView },
+                factory = { context ->
+                    TextureView(context).apply {
+                        onTextureViewCreated(this)
+                    }
+                },
                 modifier = Modifier.fillMaxSize()
             )
         }
 
         state.snapshot?.let { bitmap ->
+            DisposableEffect(bitmap) {
+                onDispose {
+                    if (!bitmap.isRecycled) {
+                        bitmap.recycle()
+                    }
+                }
+            }
+
             Box(
-                modifier = Modifier.fillMaxSize().background(Color.Black),
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.Black),
                 contentAlignment = Alignment.Center
             ) {
                 Image(

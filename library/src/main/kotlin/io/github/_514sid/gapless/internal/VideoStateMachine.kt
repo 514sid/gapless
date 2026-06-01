@@ -17,7 +17,6 @@ import androidx.media3.exoplayer.ExoPlayer
 
 @OptIn(UnstableApi::class)
 internal class VideoStateMachine(context: Context) {
-
     val exoPlayer: ExoPlayer = ExoPlayer.Builder(context)
         .setRenderersFactory(DefaultRenderersFactory(context).setEnableDecoderFallback(false))
         .setLoadControl(
@@ -29,15 +28,13 @@ internal class VideoStateMachine(context: Context) {
         .apply {
             videoScalingMode = C.VIDEO_SCALING_MODE_SCALE_TO_FIT
             repeatMode = ExoPlayer.REPEAT_MODE_ONE
-            playWhenReady = true
             addListener(object : Player.Listener {
                 override fun onRenderedFirstFrame() {
-                    val aspectRatio = currentMediaItem?.localConfiguration?.tag as? Float
-                    onFirstFrameRendered(aspectRatio)
+                    onFirstFrameRendered()
                 }
                 override fun onPlayerError(error: PlaybackException) {
-                    onError?.invoke(error.message ?: error.toString())
-                    onError()
+                    onErrorCallback?.invoke(error.message ?: error.toString())
+                    handleErrorState()
                 }
             })
         }
@@ -46,32 +43,29 @@ internal class VideoStateMachine(context: Context) {
         private set
 
     var textureViewRef: TextureView? = null
-    var onError: ((String) -> Unit)? = null
+        set(value) {
+            field = value
+            if (value != null) {
+                exoPlayer.setVideoTextureView(value)
+            } else {
+                exoPlayer.clearVideoSurface()
+            }
+        }
+
+    var onErrorCallback: ((String) -> Unit)? = null
 
     private var pendingItem: PlaybackItem.Video? = null
     private var isPreloaded = false
-
-    // True while a video is actively playing, used to pick the right
-    // ExoPlayer path (playlist vs cold start) when a new prepare arrives.
     private var isPlaying = false
 
-    /**
-     * Start buffering [item] in the background without changing the display.
-     * Cancels any previous pending prepare.
-     */
     fun prepare(item: PlaybackItem.Video) {
         pendingItem = item
         isPreloaded = false
 
         if (isPlaying) {
-            // Queue as second playlist item for gapless video-to-video handoff.
-            // Aspect ratio is intentionally NOT updated here - it changes in play()
-            // after the snapshot is captured, so the current video never visibly jumps.
             if (exoPlayer.mediaItemCount > 1) exoPlayer.removeMediaItem(1)
             exoPlayer.addMediaItem(buildMediaItem(item))
         } else {
-            // Cold prepare coming from image, web, or idle.
-            // Safe to update aspect ratio now - another layer covers the VideoLayer.
             renderState = renderState.copy(aspectRatio = item.targetAspectRatio)
             exoPlayer.setMediaItem(buildMediaItem(item))
             exoPlayer.playWhenReady = false
@@ -79,16 +73,9 @@ internal class VideoStateMachine(context: Context) {
         }
     }
 
-    /**
-     * Transition to [item].
-     *
-     * If [item] matches the pending prepare, the buffered content is used
-     * directly. Otherwise, the item is prepared and played immediately.
-     */
     fun play(item: PlaybackItem.Video) {
         if (pendingItem?.playbackId == item.playbackId) {
             if (isPlaying && exoPlayer.mediaItemCount > 1) {
-                // Gapless playlist swap - capture snapshot if aspect ratio changes.
                 if (renderState.aspectRatio != item.targetAspectRatio) {
                     renderState = renderState.copy(snapshot = textureViewRef?.bitmap)
                 }
@@ -99,7 +86,6 @@ internal class VideoStateMachine(context: Context) {
                 exoPlayer.play()
             }
         } else {
-            // Different item or nothing prepared - cold immediate play.
             pendingItem = item
             renderState = renderState.copy(aspectRatio = item.targetAspectRatio)
             exoPlayer.setMediaItem(buildMediaItem(item))
@@ -109,30 +95,23 @@ internal class VideoStateMachine(context: Context) {
         isPlaying = true
     }
 
-    /** Called by the ExoPlayer listener when the first frame of a new item renders. */
-    fun onFirstFrameRendered(aspectRatio: Float?) {
+    fun onFirstFrameRendered() {
         isPreloaded = true
-        renderState = renderState.copy(
-            aspectRatio = aspectRatio ?: renderState.aspectRatio,
-            snapshot = null
-        )
+        renderState = renderState.copy(snapshot = null)
     }
 
-    fun onError() {
+    fun handleErrorState() {
         isPreloaded = false
         pendingItem = null
         renderState = renderState.copy(snapshot = null)
     }
 
-    /** Drop a pending prepare without stopping current playback. */
     fun cancelPrepare() {
         pendingItem = null
         isPreloaded = false
         if (isPlaying) {
-            // Drop the queued next item from the playlist, keep current video running.
             if (exoPlayer.mediaItemCount > 1) exoPlayer.removeMediaItem(1)
         } else {
-            // Was cold-preparing with no video on screen - reset fully.
             exoPlayer.stop()
             exoPlayer.clearMediaItems()
             renderState = renderState.copy(aspectRatio = null)
@@ -150,7 +129,7 @@ internal class VideoStateMachine(context: Context) {
 
     fun release() {
         clear()
-        exoPlayer.clearVideoSurface()
+        textureViewRef = null
         exoPlayer.release()
     }
 

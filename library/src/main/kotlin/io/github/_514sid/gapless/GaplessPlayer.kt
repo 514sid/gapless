@@ -43,21 +43,6 @@ fun GaplessPlayer(
         }
     }
 
-    val textureView = remember {
-        TextureView(context).apply { isOpaque = true }
-    }
-
-    DisposableEffect(textureView, orchestrator) {
-        orchestrator.video.exoPlayer.setVideoTextureView(textureView)
-        orchestrator.video.textureViewRef = textureView
-        manager.onPlayerReady()
-
-        onDispose {
-            orchestrator.video.exoPlayer.clearVideoSurface()
-            orchestrator.video.textureViewRef = null
-        }
-    }
-
     DisposableEffect(orchestrator) {
         onDispose {
             orchestrator.release()
@@ -87,8 +72,11 @@ fun GaplessPlayer(
             val active = orchestrator.activeContent
 
             VideoPlayer(
-                textureView = textureView,
                 state = orchestrator.video.renderState,
+                onTextureViewCreated = { view ->
+                    view.isOpaque = true
+                    orchestrator.video.textureViewRef = view
+                },
                 modifier = Modifier.fillMaxSize()
             )
 

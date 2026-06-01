@@ -25,7 +25,7 @@ internal class PlayerOrchestrator(
     var onError: ((String) -> Unit)? = null
 
     init {
-        video.onError = { message -> onError?.invoke(message) }
+        video.onErrorCallback = { message -> onError?.invoke(message) }
 
         scope.launch {
             controller.commands.collect { command ->
