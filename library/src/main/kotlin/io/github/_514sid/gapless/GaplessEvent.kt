@@ -13,6 +13,4 @@ sealed class GaplessEvent {
     /** No assets were passed to the manager. */
     data class Empty(override val timestamp: Long = System.currentTimeMillis()) : GaplessEvent()
 
-    /** Assets exist but none currently satisfies its scheduling constraints. */
-    data class Idle(override val timestamp: Long = System.currentTimeMillis()) : GaplessEvent()
 }

@@ -10,18 +10,10 @@ import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
@@ -73,8 +65,6 @@ class PlayerActivity : ComponentActivity() {
                             Log.d(TAG, "Empty: no assets configured")
                         is GaplessEvent.Preloading ->
                             Log.d(TAG, "Preloading: ${event.asset.id}")
-                        is GaplessEvent.Idle ->
-                            Log.d(TAG, "Idle: no assets match current schedule")
                     }
                 }
             }
@@ -87,36 +77,6 @@ class PlayerActivity : ComponentActivity() {
                         modifier = Modifier.fillMaxSize(),
                         manager = manager,
                         rotation = GaplessRotation.Deg0,
-                        emptyState = {
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxSize()
-                                    .background(Color.Black),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Text(
-                                    text = "No content",
-                                    color = Color.White,
-                                    fontSize = 18.sp,
-                                    modifier = Modifier.padding(16.dp)
-                                )
-                            }
-                        },
-                        idleState = {
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxSize()
-                                    .background(Color.Black),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Text(
-                                    text = "Outside scheduled hours",
-                                    color = Color.Gray,
-                                    fontSize = 18.sp,
-                                    modifier = Modifier.padding(16.dp)
-                                )
-                            }
-                        }
                     )
                 }
             }
