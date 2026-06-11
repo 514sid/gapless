@@ -44,12 +44,26 @@ class GaplessPlaylistManager(
     private var startJob: Job? = null
     private var preloadJob: Job? = null
 
+    private fun requireValidAssets(assets: List<GaplessAsset>) {
+        assets.forEach { asset ->
+            require(asset.id.isNotBlank()) { "Asset with uri \"${asset.uri}\" has a blank id" }
+            require(asset.uri.isNotBlank()) { "Asset \"${asset.id}\" has a blank uri" }
+            require(asset.durationMs > 0) { "Asset \"${asset.id}\" has durationMs=${asset.durationMs}, must be > 0" }
+        }
+        val seen = mutableSetOf<String>()
+        assets.forEach { asset ->
+            require(seen.add(asset.id)) { "Duplicate asset id \"${asset.id}\"" }
+        }
+    }
+
     fun start(assets: List<GaplessAsset>) {
+        requireValidAssets(assets)
         this.assets = assets
         startLoop()
     }
 
     fun update(assets: List<GaplessAsset>) {
+        requireValidAssets(assets)
         this.assets = assets
         if (assets.isEmpty()) {
             stop()
