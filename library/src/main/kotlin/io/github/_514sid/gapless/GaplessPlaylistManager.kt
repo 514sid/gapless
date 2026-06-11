@@ -192,7 +192,10 @@ class GaplessPlaylistManager(
             val failed = currentAssetFailed
             currentAssetFailed = false
 
-            val next = findNext() ?: awaitNextCycle(lastPlayedId = currentItem.assetId)
+            val next = findNext() ?: run {
+                _events.tryEmit(GaplessEvent.CycleCompleted())
+                awaitNextCycle(lastPlayedId = currentItem.assetId)
+            }
             val nextItem = toPlaybackItem(next)
 
             controller.prepare(nextItem)
