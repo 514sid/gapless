@@ -13,4 +13,6 @@ sealed class GaplessEvent {
     /** No assets were passed to the manager. */
     data class Empty(override val timestamp: Long = System.currentTimeMillis()) : GaplessEvent()
 
+    /** Every asset in the playlist has been played at least once this pass. */
+    data class CycleCompleted(override val timestamp: Long = System.currentTimeMillis()) : GaplessEvent()
 }
