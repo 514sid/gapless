@@ -25,6 +25,8 @@ import java.time.format.DateTimeParseException
  * @property playTimeTo Optional end of the daily time window in "HH:mm" or "HH:mm:ss" format.
  * Supports midnight-crossing ranges (e.g., 22:00 to 06:00).
  * @property refreshIntervalMs Reload interval in milliseconds for web assets. Null means no auto-refresh.
+ * @property volume Playback volume for video assets, from 0.0 (silent) to 1.0 (full). Defaults to 0.0.
+ * Non-video assets ignore this field.
  */
 data class GaplessAsset(
     val id: String,
@@ -39,6 +41,7 @@ data class GaplessAsset(
     val playTimeFrom: String? = null,
     val playTimeTo: String? = null,
     val refreshIntervalMs: Long? = null,
+    val volume: Float = 0f,
 ) {
     constructor(
         id: Int,
@@ -53,6 +56,7 @@ data class GaplessAsset(
         playTimeFrom: String? = null,
         playTimeTo: String? = null,
         refreshIntervalMs: Long? = null,
+        volume: Float = 0f,
     ) : this(
         id = id.toString(),
         uri = uri,
@@ -66,6 +70,7 @@ data class GaplessAsset(
         playTimeFrom = playTimeFrom,
         playTimeTo = playTimeTo,
         refreshIntervalMs = refreshIntervalMs,
+        volume = volume,
     )
     companion object {
         private val TIME_FORMATTER = DateTimeFormatter.ofPattern("HH:mm[:ss]")

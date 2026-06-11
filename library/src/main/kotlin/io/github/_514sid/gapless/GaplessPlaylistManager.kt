@@ -227,7 +227,8 @@ class GaplessPlaylistManager(
             g.isVideo -> PlaybackItem.Video(
                 uri = g.uri.toUri(),
                 width = g.width ?: 1920,
-                height = g.height ?: 1080
+                height = g.height ?: 1080,
+                volume = g.volume,
             )
             g.isImage -> PlaybackItem.Image(
                 model = g.uri,

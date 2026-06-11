@@ -80,14 +80,17 @@ internal class VideoStateMachine(context: Context) {
                     renderState = renderState.copy(snapshot = textureViewRef?.bitmap)
                 }
                 renderState = renderState.copy(aspectRatio = item.targetAspectRatio)
+                exoPlayer.volume = item.volume
                 exoPlayer.seekToNextMediaItem()
                 exoPlayer.removeMediaItem(0)
             } else {
+                exoPlayer.volume = item.volume
                 exoPlayer.play()
             }
         } else {
             pendingItem = item
             renderState = renderState.copy(aspectRatio = item.targetAspectRatio)
+            exoPlayer.volume = item.volume
             exoPlayer.setMediaItem(buildMediaItem(item))
             exoPlayer.prepare()
             exoPlayer.playWhenReady = true
