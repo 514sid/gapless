@@ -1,9 +1,12 @@
 package io.github._514sid.gapless
 
+import android.util.Log
 import java.time.Clock
+import java.time.DateTimeException
 import java.time.DayOfWeek
 import java.time.LocalDate
 import java.time.LocalTime
+import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.time.format.DateTimeParseException
 
@@ -27,6 +30,9 @@ import java.time.format.DateTimeParseException
  * @property refreshIntervalMs Reload interval in milliseconds for web assets. Null means no auto-refresh.
  * @property volume Playback volume for video assets, from 0.0 (silent) to 1.0 (full). Defaults to 0.0.
  * Non-video assets ignore this field.
+ * @property timeZoneId IANA timezone name (e.g. `"America/New_York"`, `"Asia/Kolkata"`, `"UTC"`) or
+ * UTC offset string (e.g. `"UTC+5"`) used to evaluate [playTimeFrom], [playTimeTo], and [playDays].
+ * Null means the device's local timezone is used.
  */
 data class GaplessAsset(
     val id: String,
@@ -42,6 +48,7 @@ data class GaplessAsset(
     val playTimeTo: String? = null,
     val refreshIntervalMs: Long? = null,
     val volume: Float = 0f,
+    val timeZoneId: String? = null,
 ) {
     constructor(
         id: Int,
@@ -57,6 +64,7 @@ data class GaplessAsset(
         playTimeTo: String? = null,
         refreshIntervalMs: Long? = null,
         volume: Float = 0f,
+        timeZoneId: String? = null,
     ) : this(
         id = id.toString(),
         uri = uri,
@@ -71,8 +79,21 @@ data class GaplessAsset(
         playTimeTo = playTimeTo,
         refreshIntervalMs = refreshIntervalMs,
         volume = volume,
+        timeZoneId = timeZoneId,
     )
+
+    init {
+        if (timeZoneId != null) {
+            try {
+                ZoneId.of(timeZoneId)
+            } catch (_: DateTimeException) {
+                Log.w(TAG, "[$id] timeZoneId \"$timeZoneId\" is not a valid zone id -- device timezone will be used")
+            }
+        }
+    }
+
     companion object {
+        private const val TAG = "GaplessAsset"
         private val TIME_FORMATTER = DateTimeFormatter.ofPattern("HH:mm[:ss]")
         private const val MIME_PREFIX_VIDEO = "video/"
         private const val MIME_PREFIX_IMAGE = "image/"
@@ -121,8 +142,12 @@ data class GaplessAsset(
         if (startDate != null && nowMs < startDate) return false
         if (endDate != null && nowMs > endDate) return false
 
-        if (!isDayValid(clock)) return false
-        if (!isTimeWindowValid(clock)) return false
+        val zonedClock = timeZoneId?.let { id ->
+            try { clock.withZone(ZoneId.of(id)) } catch (_: DateTimeException) { clock }
+        } ?: clock
+
+        if (!isDayValid(zonedClock)) return false
+        if (!isTimeWindowValid(zonedClock)) return false
 
         return true
     }
