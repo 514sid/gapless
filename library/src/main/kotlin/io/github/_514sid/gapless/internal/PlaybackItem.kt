@@ -17,7 +17,8 @@ internal sealed class PlaybackItem {
     data class Video(
         val uri: Uri,
         override val width: Int,
-        override val height: Int
+        override val height: Int,
+        val volume: Float = 0f,
     ) : PlaybackItem()
 
     data class Image(
