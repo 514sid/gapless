@@ -151,6 +151,7 @@ class GaplessPlaylistManager(
     }
 
     private fun reschedulePreload() {
+        startJob?.cancel()
         preloadJob?.cancel()
         launchPreloadJob()
     }
@@ -283,6 +284,7 @@ class GaplessPlaylistManager(
             currentPlaybackItem = nextItem
             _events.tryEmit(GaplessEvent.Started(targetAsset, nextItem.playbackId))
 
+            rebuildPlaylist(lastPlayedId = nextItem.assetId)
             launchPreloadJob()
         }
     }

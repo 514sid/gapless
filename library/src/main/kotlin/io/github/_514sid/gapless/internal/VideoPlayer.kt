@@ -46,6 +46,7 @@ internal fun VideoPlayer(
                         onTextureViewCreated(this)
                     }
                 },
+                update = { view -> onTextureViewCreated(view) },
                 modifier = Modifier.fillMaxSize()
             )
         }
