@@ -95,7 +95,7 @@ class GaplessPlaylistManager(
         val from = currentPlaybackItem
             ?.let { item -> playlist.indexOfFirst { it.id == item.assetId }.coerceAtLeast(0) }
             ?: 0
-        return playlist.subList(from, playlist.size).firstOrNull { it.isActiveNow() }
+        return playlist.subList(from, playlist.size).firstOrNull()
     }
 
     private fun findNext(): GaplessAsset? {
@@ -103,29 +103,17 @@ class GaplessPlaylistManager(
             ?.let { item -> playlist.indexOfFirst { it.id == item.assetId } }
             ?: -1
         val from = (after + 1).coerceAtLeast(0)
-        return playlist.subList(from, playlist.size).firstOrNull { it.isActiveNow() }
+        return playlist.subList(from, playlist.size).firstOrNull()
     }
 
-    private suspend fun awaitActive(lastPlayedAssetId: String? = null): GaplessAsset {
+    private fun awaitActive(lastPlayedAssetId: String? = null): GaplessAsset {
         rebuildPlaylist(lastPlayedId = lastPlayedAssetId)
-        var idleEmitted = false
-        while (true) {
-            val found = findFromCurrent()
-            if (found != null) return found
-            if (!idleEmitted) { _events.tryEmit(GaplessEvent.Idle()); idleEmitted = true }
-            delay(100)
-        }
+        return findFromCurrent() ?: playlist.first()
     }
 
-    private suspend fun awaitNextCycle(lastPlayedId: String): GaplessAsset {
+    private fun awaitNextCycle(lastPlayedId: String): GaplessAsset {
         rebuildPlaylist(lastPlayedId = lastPlayedId)
-        var idleEmitted = false
-        while (true) {
-            val found = playlist.firstOrNull { it.isActiveNow() }
-            if (found != null) return found
-            if (!idleEmitted) { _events.tryEmit(GaplessEvent.Idle()); idleEmitted = true }
-            delay(100)
-        }
+        return playlist.first()
     }
 
     private fun startLoop() {
@@ -247,7 +235,7 @@ class GaplessPlaylistManager(
      * by the original source order, regardless of local shuffle state.
      */
     fun syncPlayIndexIn(index: Int, delayMs: Long) {
-        val targetAsset = assets.getOrNull(index)?.takeIf { it.isActiveNow() } ?: return
+        val targetAsset = assets.getOrNull(index) ?: return
 
         startJob?.cancel()
         preloadJob?.cancel()

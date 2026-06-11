@@ -16,10 +16,8 @@ Plays video, images, and web content in a continuous loop. Transitions are prelo
 
 - **Zero black frames** — next asset is buffered before the current one finishes
 - **Mixed media** — video (MP4, HLS, DASH, RTSP via ExoPlayer), images (Coil), and web pages (WebView) in the same playlist
-- **Scheduling** — per-asset date ranges, days of the week, and time-of-day windows with midnight-crossing support
 - **Shuffle** — reshuffles each cycle, preventing the last-played asset from appearing first
 - **Rotation** — built-in 0/90/180/270 degree content rotation without affecting the composable's layout bounds
-- **Custom states** — supply your own composable for empty playlists and idle (scheduled-but-inactive) states
 
 ---
 
@@ -102,10 +100,10 @@ GaplessPlayer(
     modifier  = Modifier.fillMaxSize(),
     manager   = manager,
     rotation  = GaplessRotation.Deg90,   // rotate content without affecting layout
-    emptyState = { /* composable shown when playlist is empty */ },
-    idleState  = { /* composable shown when assets exist but none match their schedule */ }
 )
 ```
+
+When the asset list is empty, the player renders nothing (transparent/black).
 
 ---
 
@@ -119,14 +117,7 @@ GaplessAsset(
     durationMs  = 10_000,        // display duration in ms
     width       = 1920,          // optional, used for aspect ratio before first frame
     height      = 1080,
-
-    // Scheduling (all optional, omit to always play)
-    startDate   = Instant.parse("2025-01-01T00:00:00Z").toEpochMilli(),
-    endDate     = Instant.parse("2025-12-31T23:59:59Z").toEpochMilli(),
-    playDays    = setOf(DayOfWeek.MONDAY, DayOfWeek.TUESDAY, DayOfWeek.WEDNESDAY,
-                        DayOfWeek.THURSDAY, DayOfWeek.FRIDAY),
-    playTimeFrom = "08:00",
-    playTimeTo   = "20:00",
+    volume      = 0f,            // video only: 0.0 (silent) to 1.0 (full)
 
     // Web assets only
     refreshIntervalMs = 60_000
@@ -156,41 +147,10 @@ lifecycleScope.launch {
             is GaplessEvent.Preloading   -> log("Buffering next: ${event.asset.id}")
             is GaplessEvent.PlaybackError -> log("Error on ${event.asset.id}: ${event.message}")
             is GaplessEvent.Empty        -> log("Playlist is empty")
-            is GaplessEvent.Idle         -> log("No assets match current schedule")
         }
     }
 }
 ```
-
----
-
-## Scheduling
-
-Each asset can carry independent temporal constraints. All fields are optional; omit them to play the asset unconditionally.
-
-```kotlin
-// Night-mode ad: plays every night 22:00-06:00 (midnight-crossing window)
-GaplessAsset(
-    id           = "night-ad",
-    uri          = "https://example.com/night.mp4",
-    mimeType     = "video/mp4",
-    durationMs   = 20_000,
-    playTimeFrom = "22:00",
-    playTimeTo   = "06:00"
-)
-
-// Weekend-only promo with an expiry date
-GaplessAsset(
-    id       = "weekend-promo",
-    uri      = "https://example.com/promo.jpg",
-    mimeType = "image/jpeg",
-    durationMs = 10_000,
-    playDays = setOf(DayOfWeek.SATURDAY, DayOfWeek.SUNDAY),
-    endDate  = Instant.parse("2025-06-30T23:59:59Z").toEpochMilli()
-)
-```
-
-When no asset matches the current time, `GaplessEvent.Idle` is emitted and `idleState` is displayed.
 
 ---
 
