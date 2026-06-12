@@ -33,7 +33,6 @@ fun GaplessPlayer(
         PlayerOrchestrator(context, scope, manager.controller, videoConfig, webConfig).also { o ->
             o.onError = { message -> manager.onPlaybackError(message) }
             o.onPreloadMissed = { assetId, elapsedMs -> manager.onPreloadMissed(assetId, elapsedMs) }
-            manager.naturalDurationProvider = { o.video.durationMs }
             manager.isNextReadyProvider = { o.isNextReady }
         }
     }
