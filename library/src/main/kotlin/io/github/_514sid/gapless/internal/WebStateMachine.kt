@@ -56,6 +56,9 @@ internal class WebStateMachine(
     private var refreshJob: Job? = null
     private var commitDeferred: CompletableDeferred<Unit>? = null
 
+    var pageCommitted: Boolean = false
+        private set
+
     private val inactiveSlot: Int
         get() = if (renderState.activeSlot == 0) 1 else 0
 
@@ -69,6 +72,7 @@ internal class WebStateMachine(
         refreshJob?.cancel()
 
         commitDeferred = CompletableDeferred()
+        pageCommitted = false
         pendingItem = item
 
         val targetView = inactiveWebView
@@ -197,6 +201,7 @@ internal class WebStateMachine(
                 if (!url.startsWith("data:text/html")) {
                     Log.i(TAG, "onPageCommitVisible(): ${view.slotName()} has successfully painted pixels! -> $url")
                     if (view === inactiveWebView) {
+                        pageCommitted = true
                         commitDeferred?.complete(Unit)
                     }
                 }

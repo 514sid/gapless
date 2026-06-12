@@ -15,4 +15,11 @@ sealed class GaplessEvent {
 
     /** Every asset in the playlist has been played at least once this pass. */
     data class CycleCompleted(override val timestamp: Long = System.currentTimeMillis()) : GaplessEvent()
+
+    /**
+     * The asset started playing before its preload completed.
+     * The transition fired on schedule to preserve sync, but content may not have been fully ready.
+     * Consider increasing [GaplessPlaylistManager.preloadMs] if this fires frequently.
+     */
+    data class PreloadMissed(val asset: GaplessAsset, val preloadMs: Long, override val timestamp: Long = System.currentTimeMillis()) : GaplessEvent()
 }

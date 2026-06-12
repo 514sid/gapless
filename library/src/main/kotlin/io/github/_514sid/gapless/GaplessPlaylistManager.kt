@@ -99,6 +99,11 @@ class GaplessPlaylistManager(
 
     internal var naturalDurationProvider: (() -> Long?)? = null
 
+    internal fun onPreloadMissed(assetId: String) {
+        val asset = assets.firstOrNull { it.id == assetId } ?: return
+        _events.tryEmit(GaplessEvent.PreloadMissed(asset, preloadMs))
+    }
+
     internal fun onPlaybackError(message: String) {
         val item = currentPlaybackItem ?: return
         val asset = assets.firstOrNull { it.id == item.assetId } ?: return
