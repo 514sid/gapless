@@ -14,20 +14,30 @@ import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
+import io.github._514sid.gapless.GaplessVideoConfig
+import io.github._514sid.gapless.GaplessVideoRepeatMode
 
 @OptIn(UnstableApi::class)
-internal class VideoStateMachine(context: Context) {
+internal class VideoStateMachine(context: Context, config: GaplessVideoConfig = GaplessVideoConfig()) {
     val exoPlayer: ExoPlayer = ExoPlayer.Builder(context)
-        .setRenderersFactory(DefaultRenderersFactory(context).setEnableDecoderFallback(false))
+        .setRenderersFactory(DefaultRenderersFactory(context).setEnableDecoderFallback(config.enableDecoderFallback))
         .setLoadControl(
             DefaultLoadControl.Builder()
-                .setBufferDurationsMs(1000, 3000, 500, 1000)
+                .setBufferDurationsMs(
+                    config.minBufferMs,
+                    config.maxBufferMs,
+                    config.bufferForPlaybackMs,
+                    config.bufferForPlaybackAfterRebufferMs,
+                )
                 .build()
         )
         .build()
         .apply {
             videoScalingMode = C.VIDEO_SCALING_MODE_SCALE_TO_FIT
-            repeatMode = ExoPlayer.REPEAT_MODE_ONE
+            repeatMode = when (config.repeatMode) {
+                GaplessVideoRepeatMode.LOOP   -> ExoPlayer.REPEAT_MODE_ONE
+                GaplessVideoRepeatMode.FREEZE -> ExoPlayer.REPEAT_MODE_OFF
+            }
             addListener(object : Player.Listener {
                 override fun onRenderedFirstFrame() {
                     onFirstFrameRendered()
