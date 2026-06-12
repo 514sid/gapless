@@ -227,10 +227,10 @@ class GaplessPlaylistManager(
     }
 
     /**
-     * Forces the player to transition to the asset at [index] in exactly [delayMs] milliseconds.
+     * Forces the player to transition to the asset with [assetId] in exactly [delayMs] milliseconds.
      */
-    fun syncPlayIndexIn(index: Int, delayMs: Long) {
-        val targetAsset = assets.getOrNull(index) ?: return
+    fun syncPlayIn(assetId: String, delayMs: Long) {
+        val targetAsset = assets.firstOrNull { it.id == assetId } ?: return
 
         startJob?.cancel()
         preloadJob?.cancel()
