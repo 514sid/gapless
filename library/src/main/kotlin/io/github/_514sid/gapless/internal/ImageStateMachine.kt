@@ -41,6 +41,9 @@ internal class ImageStateMachine(
     private var prepareJob: Job? = null
     private var pendingItem: PlaybackItem.Image? = null
 
+    val isPrepareComplete: Boolean
+        get() = prepareJob?.isActive != true
+
     private val inactiveSlot: Int
         get() = if (renderState.activeSlot == 0) 1 else 0
 

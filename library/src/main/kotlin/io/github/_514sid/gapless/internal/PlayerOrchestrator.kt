@@ -27,6 +27,7 @@ internal class PlayerOrchestrator(
         private set
 
     var onError: ((String) -> Unit)? = null
+    var onPreloadMissed: ((assetId: String, elapsedMs: Long) -> Unit)? = null
 
     init {
         video.onErrorCallback = { message -> onError?.invoke(message) }
@@ -75,12 +76,14 @@ internal class PlayerOrchestrator(
                 activeContent = ActiveContent.VIDEO
             }
             is PlaybackItem.Image -> {
+                if (!image.isPrepareComplete) onPreloadMissed?.invoke(item.assetId, System.currentTimeMillis() - item.preparedAt)
                 image.play(item)
                 video.clear()
                 web.clear()
                 activeContent = ActiveContent.IMAGE
             }
             is PlaybackItem.Web -> {
+                if (!web.pageCommitted) onPreloadMissed?.invoke(item.assetId, System.currentTimeMillis() - item.preparedAt)
                 web.play(item)
                 video.clear()
                 image.clear()
