@@ -7,11 +7,15 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import androidx.core.net.toUri
+import java.util.UUID
 
 /**
  * Playlist manager - drives [GaplessPlayer] via explicit prepare/play commands.
@@ -32,6 +36,9 @@ class GaplessPlaylistManager(
     // most recent state event such as Empty or Idle.
     private val _events = MutableSharedFlow<GaplessEvent>(replay = 1, extraBufferCapacity = 16)
     val events: SharedFlow<GaplessEvent> = _events.asSharedFlow()
+
+    private val _currentState = MutableStateFlow<GaplessPlaybackState?>(null)
+    val currentState: StateFlow<GaplessPlaybackState?> = _currentState.asStateFlow()
 
     private var assets: List<GaplessAsset> = emptyList()
 
@@ -68,6 +75,7 @@ class GaplessPlaylistManager(
         this.assets = assets
         if (assets.isEmpty()) {
             stop()
+            _currentState.value = null
             _events.tryEmit(GaplessEvent.Empty())
             return
         }
@@ -81,6 +89,12 @@ class GaplessPlaylistManager(
         preloadJob?.cancel()
         startJob = null
         preloadJob = null
+        _currentState.value = null
+    }
+
+    private fun emitStarted(asset: GaplessAsset, playbackId: UUID, startedAt: Long) {
+        _currentState.value = GaplessPlaybackState(asset, playbackId, startedAt)
+        _events.tryEmit(GaplessEvent.Started(asset, playbackId))
     }
 
     internal var naturalDurationProvider: (() -> Long?)? = null
@@ -119,7 +133,7 @@ class GaplessPlaylistManager(
     private fun startLoop() {
         startJob?.cancel()
         preloadJob?.cancel()
-        if (assets.isEmpty()) { _events.tryEmit(GaplessEvent.Empty()); return }
+        if (assets.isEmpty()) { _currentState.value = null; _events.tryEmit(GaplessEvent.Empty()); return }
 
         currentAssetFailed = false
         startJob = scope.launch {
@@ -133,7 +147,7 @@ class GaplessPlaylistManager(
 
             controller.play(item)
             item.startedAt = System.currentTimeMillis()
-            _events.tryEmit(GaplessEvent.Started(first, item.playbackId))
+            emitStarted(first, item.playbackId, item.startedAt)
             launchPreloadJob()
         }
     }
@@ -168,7 +182,7 @@ class GaplessPlaylistManager(
             }
             nextItem.startedAt = System.currentTimeMillis()
             currentPlaybackItem = nextItem
-            _events.tryEmit(GaplessEvent.Started(next, nextItem.playbackId))
+            emitStarted(next, nextItem.playbackId, nextItem.startedAt)
 
             launchPreloadJob()
         }
@@ -222,7 +236,7 @@ class GaplessPlaylistManager(
             if (!failed) _events.tryEmit(GaplessEvent.Ended(current, currentItem.playbackId))
             nextItem.startedAt = System.currentTimeMillis()
             currentPlaybackItem = nextItem
-            _events.tryEmit(GaplessEvent.Started(next, nextItem.playbackId))
+            emitStarted(next, nextItem.playbackId, nextItem.startedAt)
         }
     }
 
@@ -285,7 +299,7 @@ class GaplessPlaylistManager(
 
             nextItem.startedAt = System.currentTimeMillis()
             currentPlaybackItem = nextItem
-            _events.tryEmit(GaplessEvent.Started(targetAsset, nextItem.playbackId))
+            emitStarted(targetAsset, nextItem.playbackId, nextItem.startedAt)
 
             launchPreloadJob()
         }
