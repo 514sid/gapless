@@ -95,7 +95,7 @@ val manager = GaplessPlaylistManager(
 )
 ```
 
-Call `start` with the first asset, then push subsequent assets with `prepareNext` in response to events. The manager preloads immediately and transitions at the right time.
+Call `start` with the first asset. On each `Started` event, call `prepareNext` to begin buffering the next asset and `play` when it is time to transition. The host controls all timing.
 
 ```kotlin
 manager.start(firstAsset)
@@ -162,7 +162,7 @@ GaplessAsset(
     id          = "unique-id",   // stable across list updates
     uri         = "https://...",  // local path, content://, or remote URL
     mimeType    = "video/mp4",   // determines the renderer
-    durationMs  = 10_000,        // display duration in ms; null plays video to its natural end
+    durationMs  = 10_000,        // host metadata — read in your Started handler to time the play() call
     width       = 1920,          // optional, used for aspect ratio before first frame
     height      = 1080,
     volume      = 0f,            // video only: 0.0 (silent) to 1.0 (full)
@@ -227,7 +227,12 @@ manager.start(nextShuffled())
 lifecycleScope.launch {
     manager.events.collect { event ->
         if (event is GaplessEvent.Started) {
-            manager.prepareNext(nextShuffled())
+            val next = nextShuffled()
+            manager.prepareNext(next)
+            launch {
+                delay(event.asset.durationMs ?: return@launch)
+                manager.play(next)
+            }
         }
     }
 }
@@ -244,6 +249,22 @@ fun nextShuffled(): GaplessAsset {
         index = 0
     }
     return shuffled[index++]
+}
+
+// Wire it up the same way — prepareNext + delayed play
+manager.start(nextShuffled())
+
+lifecycleScope.launch {
+    manager.events.collect { event ->
+        if (event is GaplessEvent.Started) {
+            val next = nextShuffled()
+            manager.prepareNext(next)
+            launch {
+                delay(event.asset.durationMs ?: return@launch)
+                manager.play(next)
+            }
+        }
+    }
 }
 
 ---
@@ -281,7 +302,7 @@ val assets = listOf(
         id       = "promo",
         uri      = "android.resource://$packageName/raw/promo",
         mimeType = "video/mp4",
-        durationMs = 10_000,
+        durationMs = 10_000L,
         width    = 3840,
         height   = 2160
     )

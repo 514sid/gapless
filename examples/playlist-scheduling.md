@@ -1,6 +1,6 @@
 # Playlist scheduling
 
-Switch the active playlist based on a time-of-day or day-of-week schedule. The host re-evaluates which playlist is active on each `Started` event and pushes the next asset accordingly.
+Switch the active playlist based on a time-of-day or day-of-week schedule. On each `Started` event the host re-evaluates which playlist is active, starts buffering the next asset, and schedules the transition.
 
 ## Time-of-day playlists
 
@@ -11,7 +11,7 @@ data class ScheduledPlaylist(
     val name: String,
     val startHour: Int, // inclusive, 0-23
     val endHour: Int,   // exclusive, 1-24
-    val assets: List<GaplessAsset>,
+    val assets: List<Pair<GaplessAsset, Long>>,  // asset + durationMs
 )
 
 val schedules = listOf(
@@ -20,8 +20,8 @@ val schedules = listOf(
         startHour = 6,
         endHour = 12,
         assets = listOf(
-            GaplessAsset(id = "morning-1", uri = "...", mimeType = "video/mp4", durationMs = 15_000),
-            GaplessAsset(id = "morning-2", uri = "...", mimeType = "image/jpeg", durationMs = 8_000),
+            GaplessAsset(id = "morning-1", uri = "...", mimeType = "video/mp4") to 15_000L,
+            GaplessAsset(id = "morning-2", uri = "...", mimeType = "image/jpeg") to 8_000L,
         )
     ),
     ScheduledPlaylist(
@@ -29,7 +29,7 @@ val schedules = listOf(
         startHour = 12,
         endHour = 18,
         assets = listOf(
-            GaplessAsset(id = "afternoon-1", uri = "...", mimeType = "video/mp4", durationMs = 20_000),
+            GaplessAsset(id = "afternoon-1", uri = "...", mimeType = "video/mp4") to 20_000L,
         )
     ),
     ScheduledPlaylist(
@@ -37,7 +37,7 @@ val schedules = listOf(
         startHour = 18,
         endHour = 24,
         assets = listOf(
-            GaplessAsset(id = "evening-1", uri = "...", mimeType = "video/mp4", durationMs = 12_000),
+            GaplessAsset(id = "evening-1", uri = "...", mimeType = "video/mp4") to 12_000L,
         )
     ),
     ScheduledPlaylist(
@@ -45,7 +45,7 @@ val schedules = listOf(
         startHour = 0,
         endHour = 6,
         assets = listOf(
-            GaplessAsset(id = "overnight-1", uri = "...", mimeType = "image/png", durationMs = 30_000),
+            GaplessAsset(id = "overnight-1", uri = "...", mimeType = "image/png") to 30_000L,
         )
     ),
 )
@@ -56,7 +56,7 @@ fun activePlaylist(schedules: List<ScheduledPlaylist>): ScheduledPlaylist? {
 }
 ```
 
-Wire it up — re-evaluate the active playlist on each transition:
+Wire it up — buffer next and schedule transition on each `Started` event:
 
 ```kotlin
 class PlayerViewModel : ViewModel() {
@@ -64,23 +64,36 @@ class PlayerViewModel : ViewModel() {
 
     init {
         val indices = mutableMapOf<String, Int>()
+        var timerJob: Job? = null
 
-        fun nextAsset(): GaplessAsset? {
+        fun nextAsset(): Pair<GaplessAsset, Long>? {
             val playlist = activePlaylist(schedules) ?: return null
             val i = indices.getOrDefault(playlist.name, 0)
             indices[playlist.name] = (i + 1) % playlist.assets.size
             return playlist.assets[i]
         }
 
-        val first = nextAsset() ?: return
+        val (first, firstDuration) = nextAsset() ?: return
         manager.start(first)
 
         viewModelScope.launch {
             manager.events.collect { event ->
                 if (event is GaplessEvent.Started) {
+                    timerJob?.cancel()
                     val next = nextAsset()
-                    if (next != null) manager.prepareNext(next)
-                    else manager.stop()
+                    if (next != null) {
+                        val (nextAsset, nextDuration) = next
+                        manager.prepareNext(nextAsset)
+                        timerJob = launch {
+                            delay(event.asset.durationMs ?: return@launch)
+                            manager.play(nextAsset)
+                        }
+                    } else {
+                        timerJob = launch {
+                            delay(event.asset.durationMs ?: return@launch)
+                            manager.stop()
+                        }
+                    }
                 }
             }
         }
@@ -88,7 +101,7 @@ class PlayerViewModel : ViewModel() {
 }
 ```
 
-Each call to `nextAsset()` picks the playlist for the current hour. The index per playlist is tracked separately so each playlist resumes where it left off when it becomes active again.
+Each `Started` event re-evaluates the active playlist. The index per playlist is tracked separately so each playlist resumes where it left off.
 
 ## Day-of-week playlists
 
@@ -103,7 +116,7 @@ data class ScheduledPlaylist(
         Calendar.MONDAY, Calendar.TUESDAY, Calendar.WEDNESDAY,
         Calendar.THURSDAY, Calendar.FRIDAY, Calendar.SATURDAY, Calendar.SUNDAY
     ),
-    val assets: List<GaplessAsset>,
+    val assets: List<Pair<GaplessAsset, Long>>,
 )
 
 fun activePlaylist(schedules: List<ScheduledPlaylist>): ScheduledPlaylist? {

@@ -1,6 +1,6 @@
 # Asset scheduling
 
-Filter assets by their own schedule rules when the manager asks for the next one. The host decides what plays — the manager handles the preload and transition.
+Filter assets by their own schedule rules in the host. On each `Started` event, decide what plays next, start buffering it, and schedule the transition.
 
 ## Per-asset schedule rules
 
@@ -15,6 +15,7 @@ data class ScheduledAsset(
     ),
     val startHour: Int = 0,  // inclusive
     val endHour: Int = 24,   // exclusive
+    val durationMs: Long,
 ) {
     fun isActiveNow(): Boolean {
         val now = Calendar.getInstance()
@@ -30,65 +31,82 @@ Define your full asset catalogue with rules:
 ```kotlin
 val catalogue = listOf(
     ScheduledAsset(
-        asset = GaplessAsset(id = "promo-weekday", uri = "...", mimeType = "video/mp4", durationMs = 15_000),
+        asset = GaplessAsset(id = "promo-weekday", uri = "...", mimeType = "video/mp4"),
         daysOfWeek = setOf(Calendar.MONDAY, Calendar.TUESDAY, Calendar.WEDNESDAY, Calendar.THURSDAY, Calendar.FRIDAY),
+        durationMs = 15_000,
     ),
     ScheduledAsset(
-        asset = GaplessAsset(id = "promo-weekend", uri = "...", mimeType = "video/mp4", durationMs = 15_000),
+        asset = GaplessAsset(id = "promo-weekend", uri = "...", mimeType = "video/mp4"),
         daysOfWeek = setOf(Calendar.SATURDAY, Calendar.SUNDAY),
+        durationMs = 15_000,
     ),
     ScheduledAsset(
-        asset = GaplessAsset(id = "lunch-offer", uri = "...", mimeType = "image/jpeg", durationMs = 8_000),
+        asset = GaplessAsset(id = "lunch-offer", uri = "...", mimeType = "image/jpeg"),
         startHour = 11,
         endHour = 14,
+        durationMs = 8_000,
     ),
     ScheduledAsset(
-        asset = GaplessAsset(id = "always-on-brand", uri = "...", mimeType = "image/png", durationMs = 5_000),
-        // no restrictions — plays any time, any day
+        asset = GaplessAsset(id = "always-on-brand", uri = "...", mimeType = "image/png"),
+        durationMs = 5_000,
     ),
 )
 
-fun activeAssets(catalogue: List<ScheduledAsset>): List<GaplessAsset> =
-    catalogue.filter { it.isActiveNow() }.map { it.asset }
+fun activeAssets(catalogue: List<ScheduledAsset>): List<ScheduledAsset> =
+    catalogue.filter { it.isActiveNow() }
 ```
 
-## Pushing next on each transition
+## Buffering and transitioning on each slot
 
-Re-evaluate the active set on every `Started` event. The schedule is re-checked at each slot boundary, so assets that expire or become eligible mid-cycle are picked up immediately:
+On each `Started` event, pick the next scheduled asset, start buffering it, then delay for the current asset's duration before calling `play`:
 
 ```kotlin
 var index = 0
+var timerJob: Job? = null
 
-fun nextActive(): GaplessAsset? {
+fun nextActive(): ScheduledAsset? {
     val active = activeAssets(catalogue)
     if (active.isEmpty()) return null
     return active[index++ % active.size]
 }
 
-val first = nextActive() ?: return  // nothing active at boot — handle in your app
-manager.start(first)
+val first = nextActive() ?: return  // nothing active at boot
+manager.start(first.asset)
 
 lifecycleScope.launch {
     manager.events.collect { event ->
         if (event is GaplessEvent.Started) {
+            timerJob?.cancel()
             val next = nextActive()
-            if (next != null) manager.prepareNext(next)
-            else manager.stop()
+            if (next != null) {
+                manager.prepareNext(next.asset)
+                timerJob = launch {
+                    delay(event.asset.durationMs ?: return@launch)
+                    manager.play(next.asset)
+                }
+            } else {
+                timerJob = launch {
+                    delay(event.asset.durationMs ?: return@launch)
+                    manager.stop()
+                }
+            }
         }
     }
 }
 ```
 
-## Handling an empty result
+The schedule is re-evaluated on every `Started` event. Assets that expire or become eligible between slots are picked up at the next boundary.
 
-When no assets are active, call `manager.stop()` to halt. To resume when assets become available again, re-evaluate on a timer:
+## Resuming after an empty period
+
+When no assets are active, `manager.stop()` halts playback. Poll until assets are available again:
 
 ```kotlin
 fun scheduleRetry() {
     lifecycleScope.launch {
         delay(60_000)
         val next = nextActive()
-        if (next != null) manager.start(next)
+        if (next != null) manager.start(next.asset)
         else scheduleRetry()
     }
 }
