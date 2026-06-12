@@ -126,7 +126,7 @@ GaplessAsset(
     id          = "unique-id",   // stable across list updates
     uri         = "https://...",  // local path, content://, or remote URL
     mimeType    = "video/mp4",   // determines the renderer
-    durationMs  = 10_000,        // display duration in ms
+    durationMs  = 10_000,        // display duration in ms; null plays video to its natural end
     width       = 1920,          // optional, used for aspect ratio before first frame
     height      = 1080,
     volume      = 0f,            // video only: 0.0 (silent) to 1.0 (full)
