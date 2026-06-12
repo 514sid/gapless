@@ -4,6 +4,7 @@ import io.github._514sid.gapless.internal.PlaybackItem
 import io.github._514sid.gapless.internal.PlayerController
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -17,74 +18,38 @@ import kotlinx.coroutines.launch
 import androidx.core.net.toUri
 import java.util.UUID
 
-/**
- * Playlist manager - drives [GaplessPlayer] via explicit prepare/play commands.
- *
- * @param scope             Coroutine scope that owns the playback loop.
- * @param preloadMs         How many milliseconds before each transition to start buffering.
- * @param skipFailedAssets  true: advance immediately on error. false: let remaining time expire.
- */
 class GaplessPlaylistManager(
     private val scope: CoroutineScope,
     val preloadMs: Long = 2_000L,
-    val skipFailedAssets: Boolean = true
 ) {
     internal val controller = PlayerController()
 
-    // replay = 1 so subscribers that join after an event is emitted (e.g. the Compose
-    // LaunchedEffect that starts after manager.start() is called) still receive the
-    // most recent state event such as Empty or Idle.
     private val _events = MutableSharedFlow<GaplessEvent>(replay = 1, extraBufferCapacity = 16)
     val events: SharedFlow<GaplessEvent> = _events.asSharedFlow()
 
     private val _currentState = MutableStateFlow<GaplessPlaybackState?>(null)
     val currentState: StateFlow<GaplessPlaybackState?> = _currentState.asStateFlow()
 
-    private var assets: List<GaplessAsset> = emptyList()
+    private val nextAssetChannel = Channel<GaplessAsset>(Channel.CONFLATED)
 
+    private var currentAsset: GaplessAsset? = null
+    private var pendingAsset: GaplessAsset? = null
     private var currentPlaybackItem: PlaybackItem? = null
-    private var currentAssetFailed = false
 
     private var startJob: Job? = null
     private var preloadJob: Job? = null
 
-    private fun requireValidAssets(assets: List<GaplessAsset>) {
-        assets.forEach { asset ->
-            require(asset.id.isNotBlank()) { "Asset with uri \"${asset.uri}\" has a blank id" }
-            require(asset.uri.isNotBlank()) { "Asset \"${asset.id}\" has a blank uri" }
-            if (asset.durationMs != null) {
-                require(asset.durationMs > 0) { "Asset \"${asset.id}\" has durationMs=${asset.durationMs}, must be > 0" }
-            } else {
-                require(asset.isVideo) { "Asset \"${asset.id}\" has durationMs=null but is not a video; natural duration is only supported for video assets" }
-            }
-        }
-        val seen = mutableSetOf<String>()
-        assets.forEach { asset ->
-            require(seen.add(asset.id)) { "Duplicate asset id \"${asset.id}\"" }
-        }
+    internal var naturalDurationProvider: (() -> Long?)? = null
+
+    internal fun onPreloadMissed(assetId: String, elapsedMs: Long) {
+        val asset = pendingAsset?.takeIf { it.id == assetId } ?: return
+        _events.tryEmit(GaplessEvent.PreloadMissed(asset, preloadMs, elapsedMs))
     }
 
-    fun start(assets: List<GaplessAsset>) {
-        requireValidAssets(assets)
-        this.assets = assets
-        startLoop()
-    }
-
-    fun update(assets: List<GaplessAsset>) {
-        requireValidAssets(assets)
-        this.assets = assets
-        if (assets.isEmpty()) {
-            stop()
-            _currentState.value = null
-            _events.tryEmit(GaplessEvent.Empty())
-            return
-        }
-        val currentStillPresent = currentPlaybackItem != null &&
-                assets.any { it.id == currentPlaybackItem!!.assetId }
-        if (currentStillPresent) reschedulePreload() else transitionToNext()
-    }
-
-    fun stop() {
+    internal fun onPlaybackError(message: String) {
+        val item = currentPlaybackItem ?: return
+        val asset = currentAsset ?: return
+        _events.tryEmit(GaplessEvent.PlaybackError(asset, item.playbackId, message))
         startJob?.cancel()
         preloadJob?.cancel()
         startJob = null
@@ -92,107 +57,108 @@ class GaplessPlaylistManager(
         _currentState.value = null
     }
 
-    private fun emitStarted(asset: GaplessAsset, playbackId: UUID, startedAt: Long) {
-        _currentState.value = GaplessPlaybackState(asset, playbackId, startedAt)
-        _events.tryEmit(GaplessEvent.Started(asset, playbackId))
-    }
-
-    internal var naturalDurationProvider: (() -> Long?)? = null
-
-    internal fun onPreloadMissed(assetId: String, elapsedMs: Long) {
-        val asset = assets.firstOrNull { it.id == assetId } ?: return
-        _events.tryEmit(GaplessEvent.PreloadMissed(asset, preloadMs, elapsedMs))
-    }
-
-    internal fun onPlaybackError(message: String) {
-        val item = currentPlaybackItem ?: return
-        val asset = assets.firstOrNull { it.id == item.assetId } ?: return
-        _events.tryEmit(GaplessEvent.PlaybackError(asset, item.playbackId, message))
-        if (skipFailedAssets) {
-            currentPlaybackItem = findNext()?.let { toPlaybackItem(it) }
-            startLoop()
+    private fun validateAsset(asset: GaplessAsset) {
+        require(asset.id.isNotBlank()) { "Asset with uri \"${asset.uri}\" has a blank id" }
+        require(asset.uri.isNotBlank()) { "Asset \"${asset.id}\" has a blank uri" }
+        if (asset.durationMs != null) {
+            require(asset.durationMs > 0) { "Asset \"${asset.id}\" has durationMs=${asset.durationMs}, must be > 0" }
         } else {
-            currentAssetFailed = true
+            require(asset.isVideo) { "Asset \"${asset.id}\" has durationMs=null but is not a video; natural duration is only supported for video assets" }
         }
     }
 
-    private fun findFromCurrent(): GaplessAsset? {
-        val from = currentPlaybackItem
-            ?.let { item -> assets.indexOfFirst { it.id == item.assetId }.coerceAtLeast(0) }
-            ?: 0
-        return assets.subList(from, assets.size).firstOrNull()
-    }
+    fun start(asset: GaplessAsset) {
+        validateAsset(asset)
+        nextAssetChannel.tryReceive()
 
-    private fun findNext(): GaplessAsset? {
-        val after = currentPlaybackItem
-            ?.let { item -> assets.indexOfFirst { it.id == item.assetId } }
-            ?: -1
-        val from = (after + 1).coerceAtLeast(0)
-        return assets.subList(from, assets.size).firstOrNull()
-    }
-
-    private fun awaitActive(): GaplessAsset = findFromCurrent() ?: assets.first()
-
-    private fun awaitNextCycle(): GaplessAsset = assets.first()
-
-    private fun startLoop() {
         startJob?.cancel()
         preloadJob?.cancel()
-        if (assets.isEmpty()) { _currentState.value = null; _events.tryEmit(GaplessEvent.Empty()); return }
 
-        currentAssetFailed = false
         startJob = scope.launch {
-            val first = awaitActive()
-            val item = toPlaybackItem(first)
+            val item = toPlaybackItem(asset)
+            pendingAsset = asset
+            currentAsset = asset
             currentPlaybackItem = item
 
             item.preparedAt = System.currentTimeMillis()
             controller.prepare(item)
-            _events.tryEmit(GaplessEvent.Preloading(first))
+            _events.tryEmit(GaplessEvent.Preloading(asset))
             delay(preloadMs)
 
+            if (!currentCoroutineContext().isActive) return@launch
+
             controller.play(item)
+            pendingAsset = null
             item.startedAt = System.currentTimeMillis()
-            emitStarted(first, item.playbackId, item.startedAt)
+            emitStarted(asset, item.playbackId, item.startedAt)
             launchPreloadJob()
         }
     }
 
-    private fun reschedulePreload() {
-        startJob?.cancel()
-        preloadJob?.cancel()
-        launchPreloadJob()
+    fun prepareNext(asset: GaplessAsset) {
+        validateAsset(asset)
+        nextAssetChannel.trySend(asset)
     }
 
-    private fun transitionToNext() {
+    fun stop() {
         startJob?.cancel()
         preloadJob?.cancel()
-        currentAssetFailed = false
+        startJob = null
+        preloadJob = null
+        nextAssetChannel.tryReceive()
+        currentAsset = null
+        pendingAsset = null
+        currentPlaybackItem = null
+        _currentState.value = null
+    }
 
-        val prevItem = currentPlaybackItem
-        val prevAsset = prevItem?.let { p -> assets.firstOrNull { it.id == p.assetId } }
+    fun syncPlayIn(asset: GaplessAsset, delayMs: Long) {
+        validateAsset(asset)
+        startJob?.cancel()
+        preloadJob?.cancel()
 
         startJob = scope.launch {
-            val next = awaitActive()
-            val nextItem = toPlaybackItem(next)
+            val nextItem = toPlaybackItem(asset)
+            val timeUntilPreload = delayMs - preloadMs
 
-            nextItem.preparedAt = System.currentTimeMillis()
-            controller.prepare(nextItem)
-            _events.tryEmit(GaplessEvent.Preloading(next))
+            pendingAsset = asset
 
-            delay(preloadMs)
+            if (timeUntilPreload > 0) {
+                delay(timeUntilPreload)
+                nextItem.preparedAt = System.currentTimeMillis()
+                controller.prepare(nextItem)
+                _events.tryEmit(GaplessEvent.Preloading(asset))
+                delay(preloadMs)
+            } else {
+                nextItem.preparedAt = System.currentTimeMillis()
+                controller.prepare(nextItem)
+                _events.tryEmit(GaplessEvent.Preloading(asset))
+                if (delayMs > 0) delay(delayMs)
+            }
+
             if (!currentCoroutineContext().isActive) return@launch
 
+            val prevItem = currentPlaybackItem
+            val prevAsset = currentAsset
+
             controller.play(nextItem)
+
             if (prevItem != null && prevAsset != null) {
                 _events.tryEmit(GaplessEvent.Ended(prevAsset, prevItem.playbackId))
             }
-            nextItem.startedAt = System.currentTimeMillis()
-            currentPlaybackItem = nextItem
-            emitStarted(next, nextItem.playbackId, nextItem.startedAt)
 
+            nextItem.startedAt = System.currentTimeMillis()
+            currentAsset = asset
+            pendingAsset = null
+            currentPlaybackItem = nextItem
+            emitStarted(asset, nextItem.playbackId, nextItem.startedAt)
             launchPreloadJob()
         }
+    }
+
+    private fun emitStarted(asset: GaplessAsset, playbackId: UUID, startedAt: Long) {
+        _currentState.value = GaplessPlaybackState(asset, playbackId, startedAt)
+        _events.tryEmit(GaplessEvent.Started(asset, playbackId))
     }
 
     private fun launchPreloadJob() {
@@ -213,36 +179,33 @@ class GaplessPlaylistManager(
     private suspend fun runPreloadLoop() {
         while (currentCoroutineContext().isActive) {
             val currentItem = currentPlaybackItem ?: break
-            val current = assets.firstOrNull { it.id == currentItem.assetId } ?: break
+            val current = currentAsset ?: break
+
+            val next = nextAssetChannel.receive()
+            if (!currentCoroutineContext().isActive) break
+
+            validateAsset(next)
+            val nextItem = toPlaybackItem(next)
+
+            nextItem.preparedAt = System.currentTimeMillis()
+            pendingAsset = next
+            controller.prepare(nextItem)
+            _events.tryEmit(GaplessEvent.Preloading(next))
 
             val durationMs = effectiveDurationMs(current)
             if (durationMs < 0) break
 
             val elapsed = System.currentTimeMillis() - currentItem.startedAt
-            val remaining = (durationMs - preloadMs) - elapsed
+            val remaining = durationMs - elapsed
             if (remaining > 0) delay(remaining)
-            if (!currentCoroutineContext().isActive) break
-
-            val failed = currentAssetFailed
-            currentAssetFailed = false
-
-            val next = findNext() ?: run {
-                _events.tryEmit(GaplessEvent.CycleCompleted())
-                awaitNextCycle()
-            }
-            val nextItem = toPlaybackItem(next)
-
-            nextItem.preparedAt = System.currentTimeMillis()
-            controller.prepare(nextItem)
-            _events.tryEmit(GaplessEvent.Preloading(next))
-
-            delay(preloadMs)
             if (!currentCoroutineContext().isActive) break
 
             controller.play(nextItem)
 
-            if (!failed) _events.tryEmit(GaplessEvent.Ended(current, currentItem.playbackId))
+            _events.tryEmit(GaplessEvent.Ended(current, currentItem.playbackId))
             nextItem.startedAt = System.currentTimeMillis()
+            currentAsset = next
+            pendingAsset = null
             currentPlaybackItem = nextItem
             emitStarted(next, nextItem.playbackId, nextItem.startedAt)
         }
@@ -265,53 +228,5 @@ class GaplessPlaylistManager(
         }
         item.assetId = g.id
         return item
-    }
-
-    /**
-     * Forces the player to transition to the asset with [assetId] in exactly [delayMs] milliseconds.
-     */
-    fun syncPlayIn(assetId: String, delayMs: Long) {
-        val targetAsset = assets.firstOrNull { it.id == assetId } ?: return
-
-        startJob?.cancel()
-        preloadJob?.cancel()
-        currentAssetFailed = false
-
-        startJob = scope.launch {
-            val nextItem = toPlaybackItem(targetAsset)
-
-            val timeUntilPreload = delayMs - preloadMs
-
-            if (timeUntilPreload > 0) {
-                delay(timeUntilPreload)
-                nextItem.preparedAt = System.currentTimeMillis()
-                controller.prepare(nextItem)
-                _events.tryEmit(GaplessEvent.Preloading(targetAsset))
-
-                delay(preloadMs)
-            } else {
-                nextItem.preparedAt = System.currentTimeMillis()
-                controller.prepare(nextItem)
-                _events.tryEmit(GaplessEvent.Preloading(targetAsset))
-
-                if (delayMs > 0) delay(delayMs)
-            }
-
-            if (!currentCoroutineContext().isActive) return@launch
-
-            controller.play(nextItem)
-
-            val prevItem = currentPlaybackItem
-            val prevAsset = prevItem?.let { p -> assets.firstOrNull { it.id == p.assetId } }
-            if (prevItem != null && prevAsset != null) {
-                _events.tryEmit(GaplessEvent.Ended(prevAsset, prevItem.playbackId))
-            }
-
-            nextItem.startedAt = System.currentTimeMillis()
-            currentPlaybackItem = nextItem
-            emitStarted(targetAsset, nextItem.playbackId, nextItem.startedAt)
-
-            launchPreloadJob()
-        }
     }
 }
