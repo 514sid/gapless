@@ -34,6 +34,7 @@ fun GaplessPlayer(
             o.onError = { message -> manager.onPlaybackError(message) }
             o.onPreloadMissed = { assetId, elapsedMs -> manager.onPreloadMissed(assetId, elapsedMs) }
             manager.naturalDurationProvider = { o.video.durationMs }
+            manager.isNextReadyProvider = { o.isNextReady }
         }
     }
 
