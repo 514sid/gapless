@@ -8,13 +8,13 @@ import android.webkit.WebChromeClient
 import android.webkit.WebResourceError
 import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
-import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.annotation.MainThread
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import io.github._514sid.gapless.GaplessWebConfig
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
@@ -27,20 +27,17 @@ import kotlinx.coroutines.withTimeout
 internal class WebStateMachine(
     private val context: Context,
     private val scope: CoroutineScope,
-    enableChromeDebugging: Boolean = true,
+    private val config: GaplessWebConfig = GaplessWebConfig(),
     var onError: ((String) -> Unit)? = null
 ) {
     companion object {
         private const val TAG = "WebStateMachine"
         private const val BLANK_PAGE =
             "<html><head><style>body { background-color: black; margin: 0; padding: 0; }</style></head><body></body></html>"
-
-        private const val DESKTOP_USER_AGENT =
-            "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36"
     }
 
     init {
-        if (enableChromeDebugging) {
+        if (config.enableChromeDebugging) {
             WebView.setWebContentsDebuggingEnabled(true)
             Log.d(TAG, "WebView remote debugging enabled via Chrome.")
         }
@@ -228,17 +225,17 @@ internal class WebStateMachine(
 
         webChromeClient = WebChromeClient()
 
-        CookieManager.getInstance().setAcceptThirdPartyCookies(this, true)
+        CookieManager.getInstance().setAcceptThirdPartyCookies(this, config.allowThirdPartyCookies)
 
         settings.apply {
             javaScriptEnabled = true
             domStorageEnabled = true
             mediaPlaybackRequiresUserGesture = false
             setSupportMultipleWindows(false)
-            mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
+            mixedContentMode = config.mixedContentMode
             useWideViewPort = true
             loadWithOverviewMode = true
-            userAgentString = DESKTOP_USER_AGENT
+            if (config.userAgent != null) userAgentString = config.userAgent
         }
 
         loadBlank()

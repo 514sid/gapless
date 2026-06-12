@@ -23,12 +23,13 @@ fun GaplessPlayer(
     modifier: Modifier = Modifier,
     manager: GaplessPlaylistManager,
     rotation: GaplessRotation = GaplessRotation.Deg0,
+    webConfig: GaplessWebConfig = GaplessWebConfig(),
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
 
     val orchestrator = remember(manager) {
-        PlayerOrchestrator(context, scope, manager.controller).also { o ->
+        PlayerOrchestrator(context, scope, manager.controller, webConfig).also { o ->
             o.onError = { message -> manager.onPlaybackError(message) }
         }
     }
