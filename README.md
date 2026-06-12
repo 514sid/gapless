@@ -54,8 +54,17 @@ class MainActivity : ComponentActivity() {
             )
         )
 
+        var index = 0
         val manager = GaplessPlaylistManager(scope = lifecycleScope)
-        manager.start(assets)
+        manager.start(assets[index++])
+
+        lifecycleScope.launch {
+            manager.events.collect { event ->
+                if (event is GaplessEvent.Started) {
+                    manager.prepareNext(assets[index++ % assets.size])
+                }
+            }
+        }
 
         setContent {
             GaplessPlayer(modifier = Modifier.fillMaxSize(), manager = manager)
@@ -70,22 +79,37 @@ class MainActivity : ComponentActivity() {
 
 ### `GaplessPlaylistManager`
 
-Owns the playlist loop. Create it once, then call `start` or `update` as your asset list changes.
+Owns the playback loop. Create it once, call `start` with a callback that returns the next asset to play.
 
 ```kotlin
 val manager = GaplessPlaylistManager(
-    scope      = lifecycleScope, // cancelled automatically with the scope
-    preloadMs  = 3_000,          // how early to buffer the next asset
-    skipFailedAssets = true
+    scope     = lifecycleScope, // cancelled automatically with the scope
+    preloadMs = 3_000,          // how early to buffer the next asset
 )
 ```
 
-| Method | Description |
-| :----- | :---------- |
-| `start(assets)` | Set the initial playlist and begin playing. |
-| `update(assets)` | Hot-swap the playlist. The current asset keeps playing if its ID is still present; otherwise the player transitions immediately to the next available asset. |
+Call `start` with the first asset, then push subsequent assets with `prepareNext` in response to events. The manager preloads immediately and transitions at the right time.
+
+```kotlin
+manager.start(firstAsset)
+
+lifecycleScope.launch {
+    manager.events.collect { event ->
+        if (event is GaplessEvent.Started) {
+            manager.prepareNext(nextAsset())
+        }
+    }
+}
+```
+
+| Method / Property | Description |
+| :---------------- | :---------- |
+| `start(asset)` | Begin playback with the given asset. |
+| `prepareNext(asset)` | Push the next asset to preload. Call this after each `Started` event. |
 | `stop()` | Cancel all coroutines and halt playback. |
+| `syncPlayIn(asset, delayMs)` | Force a specific asset to play in exactly `delayMs` milliseconds (multi-device sync). |
 | `events: SharedFlow<GaplessEvent>` | Stream of playback events (collect in a coroutine). |
+| `currentState: StateFlow<GaplessPlaybackState?>` | Currently-playing asset, playback ID, and start timestamp. |
 
 ---
 
@@ -154,62 +178,61 @@ Collect from `manager.events`:
 lifecycleScope.launch {
     manager.events.collect { event ->
         when (event) {
-            is GaplessEvent.Started      -> log("Playing: ${event.asset.id} [${event.playbackId}]")
-            is GaplessEvent.Ended        -> log("Finished: ${event.asset.id}")
-            is GaplessEvent.Preloading   -> log("Buffering next: ${event.asset.id}")
+            is GaplessEvent.Started       -> log("Playing: ${event.asset.id} [${event.playbackId}]")
+            is GaplessEvent.Ended         -> log("Finished: ${event.asset.id}")
+            is GaplessEvent.Preloading    -> log("Buffering next: ${event.asset.id}")
             is GaplessEvent.PlaybackError -> log("Error on ${event.asset.id}: ${event.message}")
-            is GaplessEvent.Empty        -> log("Playlist is empty")
+            is GaplessEvent.PreloadMissed -> log("Preload not ready for ${event.asset.id}: took ${event.elapsedMs}ms")
         }
     }
 }
 ```
+
+`PlaybackError` stops the loop — the host decides whether to call `start()` again, retry, or stay blank.
 
 ---
 
 ## Shuffle
 
-The library plays assets in the order you provide. To shuffle, reorder the list before passing it in.
+Manage the shuffled order in the host and push assets via `prepareNext`.
 
-**Shuffle once on start:**
-
-```kotlin
-manager.start(assets.shuffled())
-```
-
-**Reshuffle after every cycle:**
-
-`CycleCompleted` fires at the start of the preload phase for the next cycle — `preloadMs` before the first asset plays again. Call `update()` inside that window and the new order takes effect seamlessly.
+**Shuffle, reshuffle every cycle:**
 
 ```kotlin
+val shuffled = assets.shuffled().toMutableList()
+var index = 0
+
+fun nextShuffled(): GaplessAsset {
+    if (index >= shuffled.size) {
+        shuffled.shuffle()
+        index = 0
+    }
+    return shuffled[index++]
+}
+
+manager.start(nextShuffled())
+
 lifecycleScope.launch {
     manager.events.collect { event ->
-        if (event is GaplessEvent.CycleCompleted) {
-            manager.update(assets.shuffled())
+        if (event is GaplessEvent.Started) {
+            manager.prepareNext(nextShuffled())
         }
     }
 }
 ```
 
-**Prevent the last-played asset from appearing first:**
+**Prevent the last-played asset from appearing first after a reshuffle:**
 
 ```kotlin
-lifecycleScope.launch {
-    var lastPlayedId: String? = null
-
-    manager.events.collect { event ->
-        when (event) {
-            is GaplessEvent.Started -> lastPlayedId = event.asset.id
-            is GaplessEvent.CycleCompleted -> {
-                val reshuffled = assets.shuffled().toMutableList()
-                val lastIndex = reshuffled.indexOfFirst { it.id == lastPlayedId }
-                if (lastIndex == 0) reshuffled.add(reshuffled.removeAt(0))
-                manager.update(reshuffled)
-            }
-            else -> {}
-        }
+fun nextShuffled(): GaplessAsset {
+    if (index >= shuffled.size) {
+        val last = shuffled.last()
+        shuffled.shuffle()
+        if (shuffled.size > 1 && shuffled.first().id == last.id) Collections.swap(shuffled, 0, 1)
+        index = 0
     }
+    return shuffled[index++]
 }
-```
 
 ---
 

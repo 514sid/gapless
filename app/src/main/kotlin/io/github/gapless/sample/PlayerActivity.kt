@@ -47,24 +47,32 @@ class PlayerActivity : ComponentActivity() {
         }
 
         val assets = emptyList<GaplessAsset>()
+        var index = 0
 
         val manager = GaplessPlaylistManager(scope = lifecycleScope, preloadMs = 3_000)
-        manager.start(assets)
+
+        if (assets.isNotEmpty()) {
+            manager.start(assets[index++])
+        }
 
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
                 manager.events.collect { event ->
                     when (event) {
-                        is GaplessEvent.Started ->
+                        is GaplessEvent.Started -> {
                             Log.d(TAG, "Started: ${event.asset.id} [${event.playbackId}]")
+                            if (assets.isNotEmpty()) {
+                                manager.prepareNext(assets[index++ % assets.size])
+                            }
+                        }
                         is GaplessEvent.Ended ->
                             Log.d(TAG, "Ended: ${event.asset.id} [${event.playbackId}]")
                         is GaplessEvent.PlaybackError ->
                             Log.e(TAG, "Error on ${event.asset.id}: ${event.message}")
-                        is GaplessEvent.Empty ->
-                            Log.d(TAG, "Empty: no assets configured")
                         is GaplessEvent.Preloading ->
                             Log.d(TAG, "Preloading: ${event.asset.id}")
+                        is GaplessEvent.PreloadMissed ->
+                            Log.w(TAG, "PreloadMissed: ${event.asset.id} took ${event.elapsedMs}ms")
                     }
                 }
             }
