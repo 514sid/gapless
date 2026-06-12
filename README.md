@@ -95,14 +95,22 @@ The Compose entry point. Pair it with a `GaplessPlaylistManager`.
 
 ```kotlin
 GaplessPlayer(
-    modifier  = Modifier.fillMaxSize(),
-    manager   = manager,
-    rotation  = GaplessRotation.Deg90,   // rotate content without affecting layout
-    webConfig = GaplessWebConfig(         // optional; shown with non-default values
-        enableChromeDebugging  = true,    // enable for development builds
+    modifier     = Modifier.fillMaxSize(),
+    manager      = manager,
+    rotation     = GaplessRotation.Deg90,
+    videoConfig  = GaplessVideoConfig(         // optional; shown with non-default values
+        enableDecoderFallback               = true,
+        minBufferMs                         = 2_000,
+        maxBufferMs                         = 8_000,
+        bufferForPlaybackMs                 = 1_000,
+        bufferForPlaybackAfterRebufferMs    = 2_000,
+        repeatMode                          = GaplessVideoRepeatMode.FREEZE,
+    ),
+    webConfig    = GaplessWebConfig(           // optional; shown with non-default values
+        enableChromeDebugging  = true,         // enable for development builds
         allowThirdPartyCookies = true,
         mixedContentMode       = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW,
-        userAgent              = null,    // null uses the WebView system default
+        userAgent              = null,         // null uses the WebView system default
     ),
 )
 ```

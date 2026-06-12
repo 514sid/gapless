@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import io.github._514sid.gapless.GaplessVideoConfig
 import io.github._514sid.gapless.GaplessWebConfig
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
@@ -14,10 +15,11 @@ internal class PlayerOrchestrator(
     context: Context,
     scope: CoroutineScope,
     val controller: PlayerController = PlayerController(),
+    videoConfig: GaplessVideoConfig = GaplessVideoConfig(),
     webConfig: GaplessWebConfig = GaplessWebConfig(),
 ) {
 
-    val video = VideoStateMachine(context)
+    val video = VideoStateMachine(context, videoConfig)
     val image = ImageStateMachine(context, scope)
     val web = WebStateMachine(context, scope, webConfig)
 
