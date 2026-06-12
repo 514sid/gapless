@@ -99,9 +99,9 @@ class GaplessPlaylistManager(
 
     internal var naturalDurationProvider: (() -> Long?)? = null
 
-    internal fun onPreloadMissed(assetId: String) {
+    internal fun onPreloadMissed(assetId: String, elapsedMs: Long) {
         val asset = assets.firstOrNull { it.id == assetId } ?: return
-        _events.tryEmit(GaplessEvent.PreloadMissed(asset, preloadMs))
+        _events.tryEmit(GaplessEvent.PreloadMissed(asset, preloadMs, elapsedMs))
     }
 
     internal fun onPlaybackError(message: String) {
@@ -146,6 +146,7 @@ class GaplessPlaylistManager(
             val item = toPlaybackItem(first)
             currentPlaybackItem = item
 
+            item.preparedAt = System.currentTimeMillis()
             controller.prepare(item)
             _events.tryEmit(GaplessEvent.Preloading(first))
             delay(preloadMs)
@@ -175,6 +176,7 @@ class GaplessPlaylistManager(
             val next = awaitActive()
             val nextItem = toPlaybackItem(next)
 
+            nextItem.preparedAt = System.currentTimeMillis()
             controller.prepare(nextItem)
             _events.tryEmit(GaplessEvent.Preloading(next))
 
@@ -230,6 +232,7 @@ class GaplessPlaylistManager(
             }
             val nextItem = toPlaybackItem(next)
 
+            nextItem.preparedAt = System.currentTimeMillis()
             controller.prepare(nextItem)
             _events.tryEmit(GaplessEvent.Preloading(next))
 
@@ -281,11 +284,13 @@ class GaplessPlaylistManager(
 
             if (timeUntilPreload > 0) {
                 delay(timeUntilPreload)
+                nextItem.preparedAt = System.currentTimeMillis()
                 controller.prepare(nextItem)
                 _events.tryEmit(GaplessEvent.Preloading(targetAsset))
 
                 delay(preloadMs)
             } else {
+                nextItem.preparedAt = System.currentTimeMillis()
                 controller.prepare(nextItem)
                 _events.tryEmit(GaplessEvent.Preloading(targetAsset))
 

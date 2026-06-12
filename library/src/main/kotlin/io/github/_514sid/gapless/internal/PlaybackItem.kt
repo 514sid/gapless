@@ -5,6 +5,7 @@ import java.util.UUID
 
 internal sealed class PlaybackItem {
     val playbackId: UUID = UUID.randomUUID()
+    var preparedAt: Long = 0L
     var startedAt: Long = 0L
     var assetId: String = ""
 
