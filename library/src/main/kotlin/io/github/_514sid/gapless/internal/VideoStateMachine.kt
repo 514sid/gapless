@@ -49,6 +49,9 @@ internal class VideoStateMachine(context: Context, config: GaplessVideoConfig = 
             })
         }
 
+    val durationMs: Long?
+        get() = exoPlayer.duration.takeIf { it != C.TIME_UNSET }
+
     var renderState by mutableStateOf(VideoPlayerState())
         private set
 

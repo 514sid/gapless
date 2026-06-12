@@ -32,6 +32,7 @@ fun GaplessPlayer(
     val orchestrator = remember(manager) {
         PlayerOrchestrator(context, scope, manager.controller, videoConfig, webConfig).also { o ->
             o.onError = { message -> manager.onPlaybackError(message) }
+            manager.naturalDurationProvider = { o.video.durationMs }
         }
     }
 

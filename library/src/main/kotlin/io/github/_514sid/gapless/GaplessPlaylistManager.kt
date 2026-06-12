@@ -45,7 +45,11 @@ class GaplessPlaylistManager(
         assets.forEach { asset ->
             require(asset.id.isNotBlank()) { "Asset with uri \"${asset.uri}\" has a blank id" }
             require(asset.uri.isNotBlank()) { "Asset \"${asset.id}\" has a blank uri" }
-            require(asset.durationMs > 0) { "Asset \"${asset.id}\" has durationMs=${asset.durationMs}, must be > 0" }
+            if (asset.durationMs != null) {
+                require(asset.durationMs > 0) { "Asset \"${asset.id}\" has durationMs=${asset.durationMs}, must be > 0" }
+            } else {
+                require(asset.isVideo) { "Asset \"${asset.id}\" has durationMs=null but is not a video; natural duration is only supported for video assets" }
+            }
         }
         val seen = mutableSetOf<String>()
         assets.forEach { asset ->
@@ -78,6 +82,8 @@ class GaplessPlaylistManager(
         startJob = null
         preloadJob = null
     }
+
+    internal var naturalDurationProvider: (() -> Long?)? = null
 
     internal fun onPlaybackError(message: String) {
         val item = currentPlaybackItem ?: return
@@ -173,13 +179,26 @@ class GaplessPlaylistManager(
         preloadJob = scope.launch { runPreloadLoop() }
     }
 
+    private suspend fun effectiveDurationMs(asset: GaplessAsset): Long {
+        asset.durationMs?.let { return it }
+        while (currentCoroutineContext().isActive) {
+            val dur = naturalDurationProvider?.invoke()
+            if (dur != null) return dur
+            delay(50)
+        }
+        return -1L
+    }
+
     private suspend fun runPreloadLoop() {
         while (currentCoroutineContext().isActive) {
             val currentItem = currentPlaybackItem ?: break
             val current = assets.firstOrNull { it.id == currentItem.assetId } ?: break
 
+            val durationMs = effectiveDurationMs(current)
+            if (durationMs < 0) break
+
             val elapsed = System.currentTimeMillis() - currentItem.startedAt
-            val remaining = (current.durationMs - preloadMs) - elapsed
+            val remaining = (durationMs - preloadMs) - elapsed
             if (remaining > 0) delay(remaining)
             if (!currentCoroutineContext().isActive) break
 
