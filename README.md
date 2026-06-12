@@ -98,6 +98,12 @@ GaplessPlayer(
     modifier  = Modifier.fillMaxSize(),
     manager   = manager,
     rotation  = GaplessRotation.Deg90,   // rotate content without affecting layout
+    webConfig = GaplessWebConfig(         // optional; shown with non-default values
+        enableChromeDebugging  = true,    // enable for development builds
+        allowThirdPartyCookies = true,
+        mixedContentMode       = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW,
+        userAgent              = null,    // null uses the WebView system default
+    ),
 )
 ```
 

@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import io.github._514sid.gapless.GaplessWebConfig
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 
@@ -12,12 +13,13 @@ internal enum class ActiveContent { NONE, VIDEO, IMAGE, WEB }
 internal class PlayerOrchestrator(
     context: Context,
     scope: CoroutineScope,
-    val controller: PlayerController = PlayerController()
+    val controller: PlayerController = PlayerController(),
+    webConfig: GaplessWebConfig = GaplessWebConfig(),
 ) {
 
     val video = VideoStateMachine(context)
     val image = ImageStateMachine(context, scope)
-    val web = WebStateMachine(context, scope)
+    val web = WebStateMachine(context, scope, webConfig)
 
     var activeContent by mutableStateOf(ActiveContent.NONE)
         private set
