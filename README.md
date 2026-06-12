@@ -158,6 +158,53 @@ lifecycleScope.launch {
 
 ---
 
+## Shuffle
+
+The library plays assets in the order you provide. To shuffle, reorder the list before passing it in.
+
+**Shuffle once on start:**
+
+```kotlin
+manager.start(assets.shuffled())
+```
+
+**Reshuffle after every cycle:**
+
+`CycleCompleted` fires at the start of the preload phase for the next cycle — `preloadMs` before the first asset plays again. Call `update()` inside that window and the new order takes effect seamlessly.
+
+```kotlin
+lifecycleScope.launch {
+    manager.events.collect { event ->
+        if (event is GaplessEvent.CycleCompleted) {
+            manager.update(assets.shuffled())
+        }
+    }
+}
+```
+
+**Prevent the last-played asset from appearing first:**
+
+```kotlin
+lifecycleScope.launch {
+    var lastPlayedId: String? = null
+
+    manager.events.collect { event ->
+        when (event) {
+            is GaplessEvent.Started -> lastPlayedId = event.asset.id
+            is GaplessEvent.CycleCompleted -> {
+                val reshuffled = assets.shuffled().toMutableList()
+                val lastIndex = reshuffled.indexOfFirst { it.id == lastPlayedId }
+                if (lastIndex == 0) reshuffled.add(reshuffled.removeAt(0))
+                manager.update(reshuffled)
+            }
+            else -> {}
+        }
+    }
+}
+```
+
+---
+
 ## Sample App
 
 The included sample demonstrates a production-style digital signage setup where **the player runs in a completely separate OS process** from the launcher activity.
