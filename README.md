@@ -16,7 +16,6 @@ Plays video, images, and web content in a continuous loop. Transitions are prelo
 
 - **Zero black frames** — next asset is buffered before the current one finishes
 - **Mixed media** — video (MP4, HLS, DASH, RTSP via ExoPlayer), images (Coil), and web pages (WebView) in the same playlist
-- **Shuffle** — reshuffles each cycle, preventing the last-played asset from appearing first
 - **Rotation** — built-in 0/90/180/270 degree content rotation without affecting the composable's layout bounds
 
 ---
@@ -77,7 +76,6 @@ Owns the playlist loop. Create it once, then call `start` or `update` as your as
 val manager = GaplessPlaylistManager(
     scope      = lifecycleScope, // cancelled automatically with the scope
     preloadMs  = 3_000,          // how early to buffer the next asset
-    shuffle    = false,
     skipFailedAssets = true
 )
 ```

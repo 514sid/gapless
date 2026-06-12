@@ -18,13 +18,11 @@ import androidx.core.net.toUri
  *
  * @param scope             Coroutine scope that owns the playback loop.
  * @param preloadMs         How many milliseconds before each transition to start buffering.
- * @param shuffle           When true, the list is reshuffled after every full pass.
  * @param skipFailedAssets  true: advance immediately on error. false: let remaining time expire.
  */
 class GaplessPlaylistManager(
     private val scope: CoroutineScope,
     val preloadMs: Long = 2_000L,
-    val shuffle: Boolean = false,
     val skipFailedAssets: Boolean = true
 ) {
     internal val controller = PlayerController()
@@ -36,7 +34,6 @@ class GaplessPlaylistManager(
     val events: SharedFlow<GaplessEvent> = _events.asSharedFlow()
 
     private var assets: List<GaplessAsset> = emptyList()
-    private var playlist: List<GaplessAsset> = emptyList()
 
     private var currentPlaybackItem: PlaybackItem? = null
     private var currentAssetFailed = false
@@ -84,7 +81,7 @@ class GaplessPlaylistManager(
 
     internal fun onPlaybackError(message: String) {
         val item = currentPlaybackItem ?: return
-        val asset = playlist.firstOrNull { it.id == item.assetId } ?: return
+        val asset = assets.firstOrNull { it.id == item.assetId } ?: return
         _events.tryEmit(GaplessEvent.PlaybackError(asset, item.playbackId, message))
         if (skipFailedAssets) {
             currentPlaybackItem = findNext()?.let { toPlaybackItem(it) }
@@ -94,41 +91,24 @@ class GaplessPlaylistManager(
         }
     }
 
-    private fun rebuildPlaylist(lastPlayedId: String? = null) {
-        playlist = if (shuffle && assets.isNotEmpty()) {
-            val shuffled = assets.shuffled()
-            if (lastPlayedId != null && shuffled.first().id == lastPlayedId)
-                shuffled.drop(1) + shuffled.first()
-            else shuffled
-        } else {
-            assets.toList()
-        }
-    }
-
     private fun findFromCurrent(): GaplessAsset? {
         val from = currentPlaybackItem
-            ?.let { item -> playlist.indexOfFirst { it.id == item.assetId }.coerceAtLeast(0) }
+            ?.let { item -> assets.indexOfFirst { it.id == item.assetId }.coerceAtLeast(0) }
             ?: 0
-        return playlist.subList(from, playlist.size).firstOrNull()
+        return assets.subList(from, assets.size).firstOrNull()
     }
 
     private fun findNext(): GaplessAsset? {
         val after = currentPlaybackItem
-            ?.let { item -> playlist.indexOfFirst { it.id == item.assetId } }
+            ?.let { item -> assets.indexOfFirst { it.id == item.assetId } }
             ?: -1
         val from = (after + 1).coerceAtLeast(0)
-        return playlist.subList(from, playlist.size).firstOrNull()
+        return assets.subList(from, assets.size).firstOrNull()
     }
 
-    private fun awaitActive(lastPlayedAssetId: String? = null): GaplessAsset {
-        rebuildPlaylist(lastPlayedId = lastPlayedAssetId)
-        return findFromCurrent() ?: playlist.first()
-    }
+    private fun awaitActive(): GaplessAsset = findFromCurrent() ?: assets.first()
 
-    private fun awaitNextCycle(lastPlayedId: String): GaplessAsset {
-        rebuildPlaylist(lastPlayedId = lastPlayedId)
-        return playlist.first()
-    }
+    private fun awaitNextCycle(): GaplessAsset = assets.first()
 
     private fun startLoop() {
         startJob?.cancel()
@@ -137,7 +117,7 @@ class GaplessPlaylistManager(
 
         currentAssetFailed = false
         startJob = scope.launch {
-            val first = awaitActive(lastPlayedAssetId = currentPlaybackItem?.assetId)
+            val first = awaitActive()
             val item = toPlaybackItem(first)
             currentPlaybackItem = item
 
@@ -164,10 +144,10 @@ class GaplessPlaylistManager(
         currentAssetFailed = false
 
         val prevItem = currentPlaybackItem
-        val prevAsset = prevItem?.let { p -> playlist.firstOrNull { it.id == p.assetId } }
+        val prevAsset = prevItem?.let { p -> assets.firstOrNull { it.id == p.assetId } }
 
         startJob = scope.launch {
-            val next = awaitActive(lastPlayedAssetId = prevItem?.assetId)
+            val next = awaitActive()
             val nextItem = toPlaybackItem(next)
 
             controller.prepare(nextItem)
@@ -196,7 +176,7 @@ class GaplessPlaylistManager(
     private suspend fun runPreloadLoop() {
         while (currentCoroutineContext().isActive) {
             val currentItem = currentPlaybackItem ?: break
-            val current = playlist.firstOrNull { it.id == currentItem.assetId } ?: break
+            val current = assets.firstOrNull { it.id == currentItem.assetId } ?: break
 
             val elapsed = System.currentTimeMillis() - currentItem.startedAt
             val remaining = (current.durationMs - preloadMs) - elapsed
@@ -208,7 +188,7 @@ class GaplessPlaylistManager(
 
             val next = findNext() ?: run {
                 _events.tryEmit(GaplessEvent.CycleCompleted())
-                awaitNextCycle(lastPlayedId = currentItem.assetId)
+                awaitNextCycle()
             }
             val nextItem = toPlaybackItem(next)
 
@@ -247,9 +227,7 @@ class GaplessPlaylistManager(
     }
 
     /**
-     * Forces the player to transition to the asset at the original [index] in exactly [delayMs] milliseconds.
-     * This references the unmodified `assets` list so multiple devices can sync
-     * by the original source order, regardless of local shuffle state.
+     * Forces the player to transition to the asset at [index] in exactly [delayMs] milliseconds.
      */
     fun syncPlayIndexIn(index: Int, delayMs: Long) {
         val targetAsset = assets.getOrNull(index) ?: return
@@ -290,7 +268,6 @@ class GaplessPlaylistManager(
             currentPlaybackItem = nextItem
             _events.tryEmit(GaplessEvent.Started(targetAsset, nextItem.playbackId))
 
-            rebuildPlaylist(lastPlayedId = nextItem.assetId)
             launchPreloadJob()
         }
     }
