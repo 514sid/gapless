@@ -26,6 +26,15 @@ internal class PlayerOrchestrator(
     var activeContent by mutableStateOf(ActiveContent.NONE)
         private set
 
+    private var lastPreparedContent: ActiveContent = ActiveContent.NONE
+
+    val isNextReady: Boolean
+        get() = when (lastPreparedContent) {
+            ActiveContent.IMAGE -> image.isPrepareComplete
+            ActiveContent.WEB   -> web.pageCommitted
+            ActiveContent.VIDEO, ActiveContent.NONE -> true
+        }
+
     var onError: ((String) -> Unit)? = null
     var onPreloadMissed: ((assetId: String, elapsedMs: Long) -> Unit)? = null
 
@@ -53,16 +62,19 @@ internal class PlayerOrchestrator(
                 image.cancelPrepare()
                 web.cancelPrepare()
                 video.prepare(item)
+                lastPreparedContent = ActiveContent.VIDEO
             }
             is PlaybackItem.Image -> {
                 video.cancelPrepare()
                 web.cancelPrepare()
                 image.prepare(item)
+                lastPreparedContent = ActiveContent.IMAGE
             }
             is PlaybackItem.Web -> {
                 video.cancelPrepare()
                 image.cancelPrepare()
                 web.prepare(item)
+                lastPreparedContent = ActiveContent.WEB
             }
         }
     }

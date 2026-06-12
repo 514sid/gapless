@@ -106,8 +106,8 @@ lifecycleScope.launch {
 | :---------------- | :---------- |
 | `start(asset)` | Begin playback with the given asset. |
 | `prepareNext(asset)` | Push the next asset to preload. Call this after each `Started` event. |
+| `play(asset)` | Play a specific asset immediately. If already preloading, transitions at once. If not, prepares and plays as soon as the renderer is ready. |
 | `stop()` | Cancel all coroutines and halt playback. |
-| `syncPlayIn(asset, delayMs)` | Force a specific asset to play in exactly `delayMs` milliseconds (multi-device sync). |
 | `events: SharedFlow<GaplessEvent>` | Stream of playback events (collect in a coroutine). |
 | `currentState: StateFlow<GaplessPlaybackState?>` | Currently-playing asset, playback ID, and start timestamp. |
 
