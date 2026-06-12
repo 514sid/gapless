@@ -18,6 +18,8 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import io.github._514sid.gapless.GaplessAsset
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import io.github._514sid.gapless.GaplessEvent
 import io.github._514sid.gapless.GaplessPlaylistManager
 import io.github._514sid.gapless.GaplessPlayer
@@ -48,6 +50,7 @@ class PlayerActivity : ComponentActivity() {
 
         val assets = emptyList<GaplessAsset>()
         var index = 0
+        var timerJob: Job? = null
 
         val manager = GaplessPlaylistManager(scope = lifecycleScope, preloadMs = 3_000)
 
@@ -62,7 +65,13 @@ class PlayerActivity : ComponentActivity() {
                         is GaplessEvent.Started -> {
                             Log.d(TAG, "Started: ${event.asset.id} [${event.playbackId}]")
                             if (assets.isNotEmpty()) {
-                                manager.prepareNext(assets[index++ % assets.size])
+                                timerJob?.cancel()
+                                val next = assets[index++ % assets.size]
+                                manager.prepareNext(next)
+                                timerJob = launch {
+                                    delay(event.asset.durationMs ?: return@launch)
+                                    manager.play(next)
+                                }
                             }
                         }
                         is GaplessEvent.Ended ->

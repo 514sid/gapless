@@ -55,13 +55,20 @@ class MainActivity : ComponentActivity() {
         )
 
         var index = 0
+        var timerJob: Job? = null
         val manager = GaplessPlaylistManager(scope = lifecycleScope)
         manager.start(assets[index++])
 
         lifecycleScope.launch {
             manager.events.collect { event ->
                 if (event is GaplessEvent.Started) {
-                    manager.prepareNext(assets[index++ % assets.size])
+                    timerJob?.cancel()
+                    val next = assets[index++ % assets.size]
+                    manager.prepareNext(next)
+                    timerJob = launch {
+                        delay(event.asset.durationMs ?: return@launch)
+                        manager.play(next)
+                    }
                 }
             }
         }
@@ -96,7 +103,12 @@ manager.start(firstAsset)
 lifecycleScope.launch {
     manager.events.collect { event ->
         if (event is GaplessEvent.Started) {
-            manager.prepareNext(nextAsset())
+            val next = nextAsset()
+            manager.prepareNext(next)
+            launch {
+                delay(event.asset.durationMs ?: return@launch)
+                manager.play(next)
+            }
         }
     }
 }
@@ -105,8 +117,8 @@ lifecycleScope.launch {
 | Method / Property | Description |
 | :---------------- | :---------- |
 | `start(asset)` | Begin playback with the given asset. |
-| `prepareNext(asset)` | Push the next asset to preload. Call this after each `Started` event. |
-| `play(asset)` | Play a specific asset immediately. If already preloading, transitions at once. If not, prepares and plays as soon as the renderer is ready. |
+| `prepareNext(asset)` | Start buffering the next asset. Call this early — as soon as `Started` fires — so it is ready when `play` is called. |
+| `play(asset)` | Transition to the asset. If already preloading, transitions immediately. If not, prepares it first and plays as soon as the renderer is ready. |
 | `stop()` | Cancel all coroutines and halt playback. |
 | `events: SharedFlow<GaplessEvent>` | Stream of playback events (collect in a coroutine). |
 | `currentState: StateFlow<GaplessPlaybackState?>` | Currently-playing asset, playback ID, and start timestamp. |

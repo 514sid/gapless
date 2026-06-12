@@ -1,13 +1,13 @@
 package io.github._514sid.gapless
 
 /**
- * Represents a single piece of media in the gapless playlist.
+ * Represents a single piece of media to play.
  *
- * @property id Unique identifier for this asset. Must be stable across list updates.
+ * @property id Unique identifier for this asset.
  * @property uri Local file path, `content://` URI, or remote URL to the media.
  * @property mimeType MIME type (e.g., "video/mp4", "image/jpeg"). Determines the rendering engine.
- * @property durationMs Duration to display this asset, in milliseconds. Defaults to 10 seconds.
- * Pass null for video assets to play to the natural end of the file.
+ * @property durationMs Optional display duration in milliseconds. Not used by the library — read this
+ * in your [GaplessEvent.Started] handler to decide when to call [GaplessPlaylistManager.play].
  * @property refreshIntervalMs Reload interval in milliseconds for web assets. Null means no auto-refresh.
  * @property volume Playback volume for video assets, from 0.0 (silent) to 1.0 (full). Defaults to 0.0.
  * Non-video assets ignore this field.
@@ -16,7 +16,7 @@ data class GaplessAsset(
     val id: String,
     val uri: String,
     val mimeType: String,
-    val durationMs: Long? = 10_000L,
+    val durationMs: Long? = null,
     val width: Int? = null,
     val height: Int? = null,
     val refreshIntervalMs: Long? = null,
@@ -26,7 +26,7 @@ data class GaplessAsset(
         id: Int,
         uri: String,
         mimeType: String,
-        durationMs: Long? = 10_000L,
+        durationMs: Long? = null,
         width: Int? = null,
         height: Int? = null,
         refreshIntervalMs: Long? = null,
