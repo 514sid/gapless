@@ -39,35 +39,28 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
+        data class Asset(val spec: GaplessAsset, val durationMs: Long)
+
         val assets = listOf(
-            GaplessAsset(
-                id = "promo-video",
-                uri = "https://example.com/promo.mp4",
-                mimeType = "video/mp4",
-                durationMs = 15_000
-            ),
-            GaplessAsset(
-                id = "poster",
-                uri = "https://example.com/poster.jpg",
-                mimeType = "image/jpeg",
-                durationMs = 8_000
-            )
+            Asset(GaplessAsset(id = "promo-video", uri = "https://example.com/promo.mp4", mimeType = "video/mp4"), 15_000L),
+            Asset(GaplessAsset(id = "poster",      uri = "https://example.com/poster.jpg", mimeType = "image/jpeg"), 8_000L),
         )
 
         var index = 0
         var timerJob: Job? = null
         val manager = GaplessPlaylistManager(scope = lifecycleScope)
-        manager.start(assets[index++])
+        manager.start(assets[index++].spec)
 
         lifecycleScope.launch {
             manager.events.collect { event ->
                 if (event is GaplessEvent.Started) {
                     timerJob?.cancel()
+                    val current = assets.first { it.spec.id == event.asset.id }
                     val next = assets[index++ % assets.size]
-                    manager.prepareNext(next)
+                    manager.prepareNext(next.spec)
                     timerJob = launch {
-                        delay(event.asset.durationMs ?: return@launch)
-                        manager.play(next)
+                        delay(current.durationMs)
+                        manager.play(next.spec)
                     }
                 }
             }
@@ -98,6 +91,7 @@ val manager = GaplessPlaylistManager(
 Call `start` with the first asset. On each `Started` event, call `prepareNext` to begin buffering the next asset and `play` when it is time to transition. The host controls all timing.
 
 ```kotlin
+val durations = mapOf("promo-video" to 15_000L, "poster" to 8_000L)
 manager.start(firstAsset)
 
 lifecycleScope.launch {
@@ -106,7 +100,7 @@ lifecycleScope.launch {
             val next = nextAsset()
             manager.prepareNext(next)
             launch {
-                delay(event.asset.durationMs ?: return@launch)
+                delay(durations[event.asset.id] ?: return@launch)
                 manager.play(next)
             }
         }
@@ -159,13 +153,12 @@ When the asset list is empty, the player renders nothing (transparent/black).
 
 ```kotlin
 GaplessAsset(
-    id          = "unique-id",   // stable across list updates
-    uri         = "https://...",  // local path, content://, or remote URL
-    mimeType    = "video/mp4",   // determines the renderer
-    durationMs  = 10_000,        // host metadata — read in your Started handler to time the play() call
-    width       = 1920,          // optional, used for aspect ratio before first frame
-    height      = 1080,
-    volume      = 0f,            // video only: 0.0 (silent) to 1.0 (full)
+    id       = "unique-id",  // stable across list updates
+    uri      = "https://...", // local path, content://, or remote URL
+    mimeType = "video/mp4",  // determines the renderer
+    width    = 1920,         // optional, used for aspect ratio before first frame
+    height   = 1080,
+    volume   = 0f,           // video only: 0.0 (silent) to 1.0 (full)
 
     // Web assets only
     refreshIntervalMs = 60_000
@@ -211,10 +204,14 @@ Manage the shuffled order in the host and push assets via `prepareNext`.
 **Shuffle, reshuffle every cycle:**
 
 ```kotlin
-val shuffled = assets.shuffled().toMutableList()
-var index = 0
+data class Asset(val spec: GaplessAsset, val durationMs: Long)
 
-fun nextShuffled(): GaplessAsset {
+val all: List<Asset> = listOf(/* ... */)
+val shuffled = all.shuffled().toMutableList()
+var index = 0
+val durations = all.associate { it.spec.id to it.durationMs }
+
+fun nextShuffled(): Asset {
     if (index >= shuffled.size) {
         shuffled.shuffle()
         index = 0
@@ -222,16 +219,16 @@ fun nextShuffled(): GaplessAsset {
     return shuffled[index++]
 }
 
-manager.start(nextShuffled())
+manager.start(nextShuffled().spec)
 
 lifecycleScope.launch {
     manager.events.collect { event ->
         if (event is GaplessEvent.Started) {
             val next = nextShuffled()
-            manager.prepareNext(next)
+            manager.prepareNext(next.spec)
             launch {
-                delay(event.asset.durationMs ?: return@launch)
-                manager.play(next)
+                delay(durations[event.asset.id] ?: return@launch)
+                manager.play(next.spec)
             }
         }
     }
@@ -241,31 +238,18 @@ lifecycleScope.launch {
 **Prevent the last-played asset from appearing first after a reshuffle:**
 
 ```kotlin
-fun nextShuffled(): GaplessAsset {
+fun nextShuffled(): Asset {
     if (index >= shuffled.size) {
         val last = shuffled.last()
         shuffled.shuffle()
-        if (shuffled.size > 1 && shuffled.first().id == last.id) Collections.swap(shuffled, 0, 1)
+        if (shuffled.size > 1 && shuffled.first().spec.id == last.spec.id) Collections.swap(shuffled, 0, 1)
         index = 0
     }
     return shuffled[index++]
 }
+```
 
-// Wire it up the same way — prepareNext + delayed play
-manager.start(nextShuffled())
-
-lifecycleScope.launch {
-    manager.events.collect { event ->
-        if (event is GaplessEvent.Started) {
-            val next = nextShuffled()
-            manager.prepareNext(next)
-            launch {
-                delay(event.asset.durationMs ?: return@launch)
-                manager.play(next)
-            }
-        }
-    }
-}
+Wire it up the same way as above — `prepareNext` + delayed `play`.
 
 ---
 
@@ -302,10 +286,9 @@ val assets = listOf(
         id       = "promo",
         uri      = "android.resource://$packageName/raw/promo",
         mimeType = "video/mp4",
-        durationMs = 10_000L,
         width    = 3840,
         height   = 2160
-    )
+    ) to 10_000L  // (asset, durationMs)
 )
 ```
 

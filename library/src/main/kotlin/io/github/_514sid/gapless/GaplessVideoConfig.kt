@@ -10,9 +10,9 @@ package io.github._514sid.gapless
  * @param maxBufferMs Maximum duration of media to buffer at any point, in milliseconds.
  * @param bufferForPlaybackMs Duration of media buffered before playback starts or resumes, in milliseconds.
  * @param bufferForPlaybackAfterRebufferMs Duration of media buffered to resume after a rebuffer, in milliseconds.
- * @param repeatMode How to handle videos shorter than their [GaplessAsset.durationMs].
+ * @param repeatMode How to handle videos shorter than the host-controlled slot duration.
  * [GaplessVideoRepeatMode.LOOP] loops the video (default).
- * [GaplessVideoRepeatMode.FREEZE] plays once then holds the last frame for the remainder of the slot.
+ * [GaplessVideoRepeatMode.FREEZE] plays once then holds the last frame until `play` is called.
  */
 data class GaplessVideoConfig(
     val enableDecoderFallback: Boolean = false,
