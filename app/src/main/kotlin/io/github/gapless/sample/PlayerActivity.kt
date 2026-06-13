@@ -48,14 +48,15 @@ class PlayerActivity : ComponentActivity() {
             window.setSustainedPerformanceMode(true)
         }
 
-        val assets = emptyList<GaplessAsset>()
+        val assets = emptyList<Pair<GaplessAsset, Long>>()
+        val durations = assets.associate { (asset, duration) -> asset.id to duration }
         var index = 0
         var timerJob: Job? = null
 
         val manager = GaplessPlaylistManager(scope = lifecycleScope, preloadMs = 3_000)
 
         if (assets.isNotEmpty()) {
-            manager.start(assets[index++])
+            manager.start(assets[index++].first)
         }
 
         lifecycleScope.launch {
@@ -66,10 +67,10 @@ class PlayerActivity : ComponentActivity() {
                             Log.d(TAG, "Started: ${event.asset.id} [${event.playbackId}]")
                             if (assets.isNotEmpty()) {
                                 timerJob?.cancel()
-                                val next = assets[index++ % assets.size]
+                                val next = assets[index++ % assets.size].first
                                 manager.prepareNext(next)
                                 timerJob = launch {
-                                    delay(event.asset.durationMs ?: return@launch)
+                                    delay(durations[event.asset.id] ?: return@launch)
                                     manager.play(next)
                                 }
                             }

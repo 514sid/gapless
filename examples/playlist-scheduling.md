@@ -74,23 +74,26 @@ class PlayerViewModel : ViewModel() {
         }
 
         val (first, firstDuration) = nextAsset() ?: return
+        var currentDuration = firstDuration
         manager.start(first)
 
         viewModelScope.launch {
             manager.events.collect { event ->
                 if (event is GaplessEvent.Started) {
                     timerJob?.cancel()
+                    val duration = currentDuration
                     val next = nextAsset()
                     if (next != null) {
                         val (nextAsset, nextDuration) = next
+                        currentDuration = nextDuration
                         manager.prepareNext(nextAsset)
                         timerJob = launch {
-                            delay(event.asset.durationMs ?: return@launch)
+                            delay(duration)
                             manager.play(nextAsset)
                         }
                     } else {
                         timerJob = launch {
-                            delay(event.asset.durationMs ?: return@launch)
+                            delay(duration)
                             manager.stop()
                         }
                     }

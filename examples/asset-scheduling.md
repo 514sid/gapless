@@ -63,6 +63,7 @@ On each `Started` event, pick the next scheduled asset, start buffering it, then
 ```kotlin
 var index = 0
 var timerJob: Job? = null
+var currentScheduled: ScheduledAsset? = null
 
 fun nextActive(): ScheduledAsset? {
     val active = activeAssets(catalogue)
@@ -71,22 +72,25 @@ fun nextActive(): ScheduledAsset? {
 }
 
 val first = nextActive() ?: return  // nothing active at boot
+currentScheduled = first
 manager.start(first.asset)
 
 lifecycleScope.launch {
     manager.events.collect { event ->
         if (event is GaplessEvent.Started) {
             timerJob?.cancel()
+            val duration = currentScheduled?.durationMs
             val next = nextActive()
+            currentScheduled = next
             if (next != null) {
                 manager.prepareNext(next.asset)
                 timerJob = launch {
-                    delay(event.asset.durationMs ?: return@launch)
+                    delay(duration ?: return@launch)
                     manager.play(next.asset)
                 }
             } else {
                 timerJob = launch {
-                    delay(event.asset.durationMs ?: return@launch)
+                    delay(duration ?: return@launch)
                     manager.stop()
                 }
             }
