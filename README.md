@@ -134,7 +134,6 @@ GaplessPlayer(
         maxBufferMs                         = 8_000,
         bufferForPlaybackMs                 = 1_000,
         bufferForPlaybackAfterRebufferMs    = 2_000,
-        repeatMode                          = GaplessVideoRepeatMode.FREEZE,
     ),
     webConfig    = GaplessWebConfig(           // optional; shown with non-default values
         enableChromeDebugging  = true,         // enable for development builds

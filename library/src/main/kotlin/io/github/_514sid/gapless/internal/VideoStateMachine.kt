@@ -15,7 +15,6 @@ import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
 import io.github._514sid.gapless.GaplessVideoConfig
-import io.github._514sid.gapless.GaplessVideoRepeatMode
 
 @OptIn(UnstableApi::class)
 internal class VideoStateMachine(context: Context, config: GaplessVideoConfig = GaplessVideoConfig()) {
@@ -34,10 +33,7 @@ internal class VideoStateMachine(context: Context, config: GaplessVideoConfig = 
         .build()
         .apply {
             videoScalingMode = C.VIDEO_SCALING_MODE_SCALE_TO_FIT
-            repeatMode = when (config.repeatMode) {
-                GaplessVideoRepeatMode.LOOP   -> ExoPlayer.REPEAT_MODE_ONE
-                GaplessVideoRepeatMode.FREEZE -> ExoPlayer.REPEAT_MODE_OFF
-            }
+            repeatMode = ExoPlayer.REPEAT_MODE_OFF
             addListener(object : Player.Listener {
                 override fun onRenderedFirstFrame() {
                     onFirstFrameRendered()
