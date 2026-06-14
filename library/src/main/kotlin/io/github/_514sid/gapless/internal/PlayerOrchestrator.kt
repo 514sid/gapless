@@ -41,7 +41,8 @@ internal class PlayerOrchestrator(
         get() = when (lastPreparedContent) {
             ActiveContent.IMAGE -> image.isPrepareComplete
             ActiveContent.WEB   -> web.pageCommitted
-            ActiveContent.VIDEO, ActiveContent.NONE -> true
+            ActiveContent.VIDEO -> video.isNextReady
+            ActiveContent.NONE  -> true
         }
 
     var onError: ((String) -> Unit)? = null
@@ -95,6 +96,7 @@ internal class PlayerOrchestrator(
     private fun play(item: PlaybackItem) {
         when (item) {
             is PlaybackItem.Video -> {
+                if (!video.isNextReady) onPreloadMissed?.invoke(item.assetId, System.currentTimeMillis() - item.preparedAt)
                 video.play(item)
                 image.clear()
                 web.clear()

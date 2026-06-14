@@ -170,6 +170,7 @@ class GaplessController(
                 width = g.width ?: 1920,
                 height = g.height ?: 1080,
                 volume = g.volume,
+                durationMs = g.durationMs,
             )
             g.isImage -> PlaybackItem.Image(
                 model = g.uri,

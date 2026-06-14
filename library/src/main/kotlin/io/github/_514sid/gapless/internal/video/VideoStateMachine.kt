@@ -31,6 +31,7 @@ internal class VideoStateMachine(context: Context, config: GaplessVideoConfig = 
                 )
                 .build()
         )
+        .setPauseAtEndOfMediaItems(true)
         .build()
         .apply {
             videoScalingMode = C.VIDEO_SCALING_MODE_SCALE_TO_FIT
@@ -38,6 +39,11 @@ internal class VideoStateMachine(context: Context, config: GaplessVideoConfig = 
             addListener(object : Player.Listener {
                 override fun onRenderedFirstFrame() {
                     onFirstFrameRendered()
+                }
+                override fun onPlayWhenReadyChanged(playWhenReady: Boolean, reason: Int) {
+                    if (reason == Player.PLAY_WHEN_READY_CHANGE_REASON_END_OF_MEDIA_ITEM) {
+                        pausedAtEnd = true
+                    }
                 }
                 override fun onPlayerError(error: PlaybackException) {
                     val msg = error.message ?: error.toString()
@@ -53,6 +59,28 @@ internal class VideoStateMachine(context: Context, config: GaplessVideoConfig = 
 
     val durationMs: Long?
         get() = exoPlayer.duration.takeIf { it != C.TIME_UNSET }
+
+    private val bufferForPlaybackMs: Long = config.bufferForPlaybackMs.toLong()
+
+    /**
+     * Whether the next video is buffered enough to transition without a rebuffer.
+     *
+     * While a clip is playing, the queued item lives at index 1 and ExoPlayer only buffers into it
+     * once the remaining content of the current item fits inside the buffer window, so this usually
+     * becomes true as the transition point approaches. While idle (no clip playing yet) it reports
+     * whether the first/only item can render.
+     */
+    val isNextReady: Boolean
+        get() {
+            if (!isPlaying) return exoPlayer.playbackState == Player.STATE_READY
+            if (exoPlayer.mediaItemCount <= 1) return false
+            val duration = exoPlayer.duration
+            // Live or not-yet-known current item: we cannot compute how much is buffered ahead.
+            if (duration == C.TIME_UNSET || duration <= 0L) return true
+            val remainingInCurrent = duration - exoPlayer.currentPosition
+            val bufferedIntoNext = exoPlayer.totalBufferedDuration - remainingInCurrent
+            return bufferedIntoNext >= bufferForPlaybackMs
+        }
 
     var renderState by mutableStateOf(VideoPlayerState())
         private set
@@ -73,6 +101,10 @@ internal class VideoStateMachine(context: Context, config: GaplessVideoConfig = 
     private var pendingItem: PlaybackItem.Video? = null
     private var isPreloaded = false
     private var isPlaying = false
+
+    // Set by pauseAtEndOfMediaItems when a clip reaches its end and the player parks on the last
+    // frame. Cleared when the next play()/prepare() acts on the player.
+    private var pausedAtEnd = false
 
     fun prepare(item: PlaybackItem.Video) {
         pendingItem = item
@@ -97,8 +129,18 @@ internal class VideoStateMachine(context: Context, config: GaplessVideoConfig = 
                 }
                 renderState = renderState.copy(aspectRatio = item.targetAspectRatio)
                 exoPlayer.volume = item.volume
-                exoPlayer.seekToNextMediaItem()
-                exoPlayer.removeMediaItem(0)
+                if (pausedAtEnd) {
+                    // The previous clip reached its end and pauseAtEndOfMediaItems parked the player
+                    // on its last frame. Removing the finished item advances to the queued clip at
+                    // its start; seekToNextMediaItem from this state leaves the renderer frozen on
+                    // the first frame.
+                    exoPlayer.removeMediaItem(0)
+                } else {
+                    exoPlayer.seekToNextMediaItem()
+                    exoPlayer.removeMediaItem(0)
+                }
+                pausedAtEnd = false
+                exoPlayer.play()
             } else {
                 exoPlayer.volume = item.volume
                 exoPlayer.play()
@@ -142,6 +184,7 @@ internal class VideoStateMachine(context: Context, config: GaplessVideoConfig = 
         exoPlayer.clearMediaItems()
         isPlaying = false
         isPreloaded = false
+        pausedAtEnd = false
         pendingItem = null
         renderState = VideoPlayerState()
     }
@@ -156,5 +199,15 @@ internal class VideoStateMachine(context: Context, config: GaplessVideoConfig = 
         MediaItem.Builder()
             .setUri(item.uri)
             .setTag(item.targetAspectRatio)
+            .apply {
+                val clipMs = item.durationMs
+                if (clipMs != null && clipMs > 0L) {
+                    setClippingConfiguration(
+                        MediaItem.ClippingConfiguration.Builder()
+                            .setEndPositionMs(clipMs)
+                            .build()
+                    )
+                }
+            }
             .build()
 }
