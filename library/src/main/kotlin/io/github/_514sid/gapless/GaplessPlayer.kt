@@ -12,11 +12,11 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.layout.onSizeChanged
 import io.github._514sid.gapless.internal.ActiveContent
-import io.github._514sid.gapless.internal.ImagePlayer
 import io.github._514sid.gapless.internal.PlayerOrchestrator
 import io.github._514sid.gapless.internal.RotatedContainer
-import io.github._514sid.gapless.internal.VideoPlayer
-import io.github._514sid.gapless.internal.WebPlayer
+import io.github._514sid.gapless.internal.image.ImagePlayer
+import io.github._514sid.gapless.internal.video.VideoPlayer
+import io.github._514sid.gapless.internal.web.WebPlayer
 
 @Composable
 fun GaplessPlayer(

@@ -1,4 +1,4 @@
-package io.github._514sid.gapless.internal
+package io.github._514sid.gapless.internal.video
 
 import android.graphics.Bitmap
 import android.view.TextureView

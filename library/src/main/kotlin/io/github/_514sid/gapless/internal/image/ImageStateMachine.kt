@@ -1,4 +1,4 @@
-package io.github._514sid.gapless.internal
+package io.github._514sid.gapless.internal.image
 
 import android.content.Context
 import androidx.annotation.MainThread
@@ -13,6 +13,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import io.github._514sid.gapless.internal.PlaybackItem
 import kotlinx.coroutines.launch
 
 @MainThread

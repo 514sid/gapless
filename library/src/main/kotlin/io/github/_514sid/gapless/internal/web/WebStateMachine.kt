@@ -1,4 +1,4 @@
-package io.github._514sid.gapless.internal
+package io.github._514sid.gapless.internal.web
 
 import android.annotation.SuppressLint
 import android.content.Context
@@ -15,6 +15,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import io.github._514sid.gapless.GaplessWebConfig
+import io.github._514sid.gapless.internal.PlaybackItem
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job

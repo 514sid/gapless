@@ -1,4 +1,4 @@
-package io.github._514sid.gapless.internal
+package io.github._514sid.gapless.internal.web
 
 import android.view.ViewGroup
 import android.webkit.WebView
