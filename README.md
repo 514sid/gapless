@@ -159,10 +159,29 @@ GaplessAsset(
     height   = 1080,
     volume   = 0f,           // video only: 0.0 (silent) to 1.0 (full)
 
+    // Video only
+    durationMs = 10_000,     // optional; clip the video so the next one can preload early
+
     // Web assets only
     refreshIntervalMs = 60_000
 )
 ```
+
+**`durationMs` (video only).** Without it, a clip plays its full natural length and ExoPlayer only begins
+buffering the next clip in the final `maxBufferMs` window, so a long clip can transition with a rebuffer.
+Setting `durationMs` clips the video to that length, which lets ExoPlayer start loading the next clip far
+earlier. For the largest benefit, pair it with a [`GaplessVideoConfig.maxBufferMs`](#gaplessplayer) at least as
+large as the clip:
+
+```kotlin
+GaplessPlayer(
+    manager     = manager,
+    videoConfig = GaplessVideoConfig(maxBufferMs = 12_000), // >= the clip length
+)
+```
+
+The host still drives the transition with `play()`. If a clip reaches its `durationMs` end before then, it holds
+on the last frame and never auto-advances. Leave `durationMs` null for live streams (HLS/DASH/RTSP).
 
 **MIME type to renderer mapping:**
 
@@ -292,6 +311,14 @@ val assets = listOf(
 ```
 
 Place raw video files under `app/src/main/res/raw/`.
+
+**Not seeing the `Started`/`Ended`/`Preloading` logs?** Some locked-down devices (e.g. Fire TV) ship with
+`persist.log.tag = I`, which raises the global logcat level to `INFO` and drops every `Log.d` call. Playback
+still runs; the debug logs are just filtered. Whitelist the tag to see them:
+
+```sh
+adb shell setprop log.tag.GaplessPlayer VERBOSE   # app sample tag; lasts until reboot
+```
 
 ---
 
