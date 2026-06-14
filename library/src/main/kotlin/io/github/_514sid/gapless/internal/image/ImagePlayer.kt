@@ -1,4 +1,4 @@
-package io.github._514sid.gapless.internal
+package io.github._514sid.gapless.internal.image
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box

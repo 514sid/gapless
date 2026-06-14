@@ -7,6 +7,8 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.awaitCancellation
+import io.github._514sid.gapless.internal.image.ImagePlayerState
+import io.github._514sid.gapless.internal.image.ImageStateMachine
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test

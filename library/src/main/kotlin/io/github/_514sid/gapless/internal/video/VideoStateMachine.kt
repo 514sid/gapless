@@ -1,4 +1,4 @@
-package io.github._514sid.gapless.internal
+package io.github._514sid.gapless.internal.video
 
 import android.content.Context
 import android.view.TextureView
@@ -15,6 +15,7 @@ import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
 import io.github._514sid.gapless.GaplessVideoConfig
+import io.github._514sid.gapless.internal.PlaybackItem
 
 @OptIn(UnstableApi::class)
 internal class VideoStateMachine(context: Context, config: GaplessVideoConfig = GaplessVideoConfig()) {

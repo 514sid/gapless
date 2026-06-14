@@ -6,6 +6,9 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import io.github._514sid.gapless.GaplessVideoConfig
 import io.github._514sid.gapless.GaplessWebConfig
+import io.github._514sid.gapless.internal.image.ImageStateMachine
+import io.github._514sid.gapless.internal.video.VideoStateMachine
+import io.github._514sid.gapless.internal.web.WebStateMachine
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 
