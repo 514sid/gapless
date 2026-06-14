@@ -36,10 +36,14 @@ internal class PlayerOrchestrator(
         }
 
     var onError: ((String) -> Unit)? = null
+    var onPreloadError: ((assetId: String, message: String) -> Unit)? = null
     var onPreloadMissed: ((assetId: String, elapsedMs: Long) -> Unit)? = null
 
     init {
         video.onErrorCallback = { message -> onError?.invoke(message) }
+        video.onPreloadErrorCallback = { assetId, message -> onPreloadError?.invoke(assetId, message) }
+        web.onPreloadError = { assetId, message -> onPreloadError?.invoke(assetId, message) }
+        image.onError = { assetId, message -> onPreloadError?.invoke(assetId, message) }
 
         scope.launch {
             controller.commands.collect { command ->
