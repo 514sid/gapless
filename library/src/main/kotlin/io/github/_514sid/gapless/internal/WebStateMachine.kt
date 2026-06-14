@@ -28,8 +28,9 @@ internal class WebStateMachine(
     private val context: Context,
     private val scope: CoroutineScope,
     private val config: GaplessWebConfig = GaplessWebConfig(),
-    var onError: ((String) -> Unit)? = null
 ) {
+    var onError: ((String) -> Unit)? = null
+    var onPreloadError: ((assetId: String, message: String) -> Unit)? = null
     companion object {
         private const val TAG = "WebStateMachine"
         private const val BLANK_PAGE =
@@ -212,7 +213,12 @@ internal class WebStateMachine(
                     val message = "Web Error on ${view.slotName()}: ${error.description}"
                     Log.e(TAG, message)
                     commitDeferred?.completeExceptionally(Exception(message))
-                    onError?.invoke(message)
+                    val pending = pendingItem
+                    if (pending != null) {
+                        onPreloadError?.invoke(pending.assetId, message)
+                    } else {
+                        onError?.invoke(message)
+                    }
                     view.loadBlank()
                 }
             }
@@ -222,7 +228,12 @@ internal class WebStateMachine(
                     val message = "HTTP Error on ${view.slotName()}: ${errorResponse.statusCode}"
                     Log.e(TAG, message)
                     commitDeferred?.completeExceptionally(Exception(message))
-                    onError?.invoke(message)
+                    val pending = pendingItem
+                    if (pending != null) {
+                        onPreloadError?.invoke(pending.assetId, message)
+                    } else {
+                        onError?.invoke(message)
+                    }
                     view.loadBlank()
                 }
             }

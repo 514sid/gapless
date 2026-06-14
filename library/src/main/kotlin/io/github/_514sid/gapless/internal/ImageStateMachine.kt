@@ -6,8 +6,10 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import coil3.imageLoader
+import coil3.request.ErrorResult
 import coil3.request.ImageRequest
 import coil3.request.allowHardware
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -18,13 +20,14 @@ internal class ImageStateMachine(
     private val context: Context,
     private val scope: CoroutineScope,
     private val loadImage: suspend (model: Any, width: Int, height: Int) -> Unit = { model, w, h ->
-        context.imageLoader.execute(
+        val result = context.imageLoader.execute(
             ImageRequest.Builder(context)
                 .data(model)
                 .size(w, h)
                 .allowHardware(true)
                 .build()
         )
+        if (result is ErrorResult) throw result.throwable
     }
 ) {
     companion object {
@@ -34,6 +37,8 @@ internal class ImageStateMachine(
 
     var renderState by mutableStateOf(ImagePlayerState())
         private set
+
+    var onError: ((assetId: String, message: String) -> Unit)? = null
 
     var containerWidth: Int = 0
     var containerHeight: Int = 0
@@ -64,7 +69,13 @@ internal class ImageStateMachine(
         val targetH = if (containerHeight > 0) containerHeight.coerceAtMost(maxH) else maxH
 
         prepareJob = scope.launch(Dispatchers.IO.limitedParallelism(1)) {
-            loadImage(item.model, targetW, targetH)
+            try {
+                loadImage(item.model, targetW, targetH)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                onError?.invoke(item.assetId, e.message ?: "Image load failed")
+            }
         }
     }
 

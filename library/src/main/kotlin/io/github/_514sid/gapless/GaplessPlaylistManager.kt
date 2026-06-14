@@ -43,6 +43,11 @@ class GaplessPlaylistManager(
         _events.tryEmit(GaplessEvent.PreloadMissed(asset, preloadMs, elapsedMs))
     }
 
+    internal fun onPreloadError(assetId: String, message: String) {
+        val asset = pendingAsset?.takeIf { it.id == assetId } ?: return
+        _events.tryEmit(GaplessEvent.PreloadError(asset, message))
+    }
+
     internal fun onPlaybackError(message: String) {
         val item = currentPlaybackItem ?: return
         val asset = currentAsset ?: return

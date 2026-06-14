@@ -79,6 +79,8 @@ class PlayerActivity : ComponentActivity() {
                             Log.d(TAG, "Ended: ${event.asset.id} [${event.playbackId}]")
                         is GaplessEvent.PlaybackError ->
                             Log.e(TAG, "Error on ${event.asset.id}: ${event.message}")
+                        is GaplessEvent.PreloadError ->
+                            Log.e(TAG, "PreloadError on ${event.asset.id}: ${event.message}")
                         is GaplessEvent.Preloading ->
                             Log.d(TAG, "Preloading: ${event.asset.id}")
                         is GaplessEvent.PreloadMissed ->

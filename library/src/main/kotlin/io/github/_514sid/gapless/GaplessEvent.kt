@@ -16,4 +16,10 @@ sealed class GaplessEvent {
      * Consider increasing [GaplessPlaylistManager.preloadMs] if this fires frequently.
      */
     data class PreloadMissed(val asset: GaplessAsset, val preloadMs: Long, val elapsedMs: Long, override val timestamp: Long = System.currentTimeMillis()) : GaplessEvent()
+
+    /**
+     * The asset failed to preload before it was scheduled to play.
+     * The asset has never been presented; the host should decide whether to skip it or retry.
+     */
+    data class PreloadError(val asset: GaplessAsset, val message: String, override val timestamp: Long = System.currentTimeMillis()) : GaplessEvent()
 }

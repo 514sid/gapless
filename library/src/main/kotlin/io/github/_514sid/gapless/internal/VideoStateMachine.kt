@@ -39,7 +39,12 @@ internal class VideoStateMachine(context: Context, config: GaplessVideoConfig = 
                     onFirstFrameRendered()
                 }
                 override fun onPlayerError(error: PlaybackException) {
-                    onErrorCallback?.invoke(error.message ?: error.toString())
+                    val msg = error.message ?: error.toString()
+                    if (!isPlaying) {
+                        onPreloadErrorCallback?.invoke(pendingItem?.assetId ?: "", msg)
+                    } else {
+                        onErrorCallback?.invoke(msg)
+                    }
                     handleErrorState()
                 }
             })
@@ -62,6 +67,7 @@ internal class VideoStateMachine(context: Context, config: GaplessVideoConfig = 
         }
 
     var onErrorCallback: ((String) -> Unit)? = null
+    var onPreloadErrorCallback: ((assetId: String, message: String) -> Unit)? = null
 
     private var pendingItem: PlaybackItem.Video? = null
     private var isPreloaded = false
