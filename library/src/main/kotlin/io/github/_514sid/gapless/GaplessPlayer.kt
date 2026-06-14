@@ -21,7 +21,7 @@ import io.github._514sid.gapless.internal.web.WebPlayer
 @Composable
 fun GaplessPlayer(
     modifier: Modifier = Modifier,
-    manager: GaplessPlaylistManager,
+    manager: GaplessController,
     rotation: GaplessRotation = GaplessRotation.Deg0,
     videoConfig: GaplessVideoConfig = GaplessVideoConfig(),
     webConfig: GaplessWebConfig = GaplessWebConfig(),
@@ -30,7 +30,7 @@ fun GaplessPlayer(
     val scope = rememberCoroutineScope()
 
     val orchestrator = remember(manager) {
-        PlayerOrchestrator(context, scope, manager.controller, videoConfig, webConfig).also { o ->
+        PlayerOrchestrator(context, scope, manager.commands, videoConfig, webConfig).also { o ->
             o.onError = { message -> manager.onPlaybackError(message) }
             o.onPreloadError = { assetId, message -> manager.onPreloadError(assetId, message) }
             o.onPreloadMissed = { assetId, elapsedMs -> manager.onPreloadMissed(assetId, elapsedMs) }
