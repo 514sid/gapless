@@ -21,7 +21,7 @@ import io.github._514sid.gapless.GaplessAsset
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import io.github._514sid.gapless.GaplessEvent
-import io.github._514sid.gapless.GaplessPlaylistManager
+import io.github._514sid.gapless.GaplessController
 import io.github._514sid.gapless.GaplessPlayer
 import io.github._514sid.gapless.GaplessRotation
 import kotlinx.coroutines.launch
@@ -53,7 +53,7 @@ class PlayerActivity : ComponentActivity() {
         var index = 0
         var timerJob: Job? = null
 
-        val manager = GaplessPlaylistManager(scope = lifecycleScope, preloadMs = 3_000)
+        val manager = GaplessController(scope = lifecycleScope, preloadMs = 3_000)
 
         if (assets.isNotEmpty()) {
             manager.start(assets[index++].first)

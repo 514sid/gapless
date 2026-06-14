@@ -1,9 +1,10 @@
 package io.github._514sid.gapless
 
 import io.github._514sid.gapless.internal.PlaybackItem
-import io.github._514sid.gapless.internal.PlayerController
+import io.github._514sid.gapless.internal.PlayerCommand
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -12,16 +13,18 @@ import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import androidx.core.net.toUri
 import java.util.UUID
 
-class GaplessPlaylistManager(
+class GaplessController(
     private val scope: CoroutineScope,
     val preloadMs: Long = 2_000L,
 ) {
-    internal val controller = PlayerController()
+    private val commandChannel = Channel<PlayerCommand>(Channel.UNLIMITED)
+    internal val commands = commandChannel.receiveAsFlow()
 
     private val _events = MutableSharedFlow<GaplessEvent>(replay = 1, extraBufferCapacity = 16)
     val events: SharedFlow<GaplessEvent> = _events.asSharedFlow()
@@ -73,13 +76,13 @@ class GaplessPlaylistManager(
         currentPlaybackItem = item
 
         item.preparedAt = System.currentTimeMillis()
-        controller.prepare(item)
+        commandChannel.trySend(PlayerCommand.Prepare(item))
         _events.tryEmit(GaplessEvent.Preloading(asset))
 
         activeJob = scope.launch {
             delay(preloadMs)
             if (!isActive) return@launch
-            controller.play(item)
+            commandChannel.trySend(PlayerCommand.Play(item))
             pendingAsset = null
             pendingPlaybackItem = null
             item.startedAt = System.currentTimeMillis()
@@ -95,7 +98,7 @@ class GaplessPlaylistManager(
         pendingAsset = asset
         pendingPlaybackItem = item
 
-        controller.prepare(item)
+        commandChannel.trySend(PlayerCommand.Prepare(item))
         _events.tryEmit(GaplessEvent.Preloading(asset))
     }
 
@@ -113,7 +116,7 @@ class GaplessPlaylistManager(
                 item.preparedAt = System.currentTimeMillis()
                 pendingAsset = asset
                 pendingPlaybackItem = item
-                controller.prepare(item)
+                commandChannel.trySend(PlayerCommand.Prepare(item))
                 _events.tryEmit(GaplessEvent.Preloading(asset))
                 item
             }
@@ -130,7 +133,7 @@ class GaplessPlaylistManager(
             val prevItem = currentPlaybackItem
             val prevAsset = currentAsset
 
-            controller.play(nextItem)
+            commandChannel.trySend(PlayerCommand.Play(nextItem))
 
             if (prevItem != null && prevAsset != null) {
                 _events.tryEmit(GaplessEvent.Ended(prevAsset, prevItem.playbackId))

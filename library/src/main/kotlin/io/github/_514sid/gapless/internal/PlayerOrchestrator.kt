@@ -10,14 +10,20 @@ import io.github._514sid.gapless.internal.image.ImageStateMachine
 import io.github._514sid.gapless.internal.video.VideoStateMachine
 import io.github._514sid.gapless.internal.web.WebStateMachine
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.launch
+
+internal sealed interface PlayerCommand {
+    data class Prepare(val item: PlaybackItem) : PlayerCommand
+    data class Play(val item: PlaybackItem) : PlayerCommand
+}
 
 internal enum class ActiveContent { NONE, VIDEO, IMAGE, WEB }
 
 internal class PlayerOrchestrator(
     context: Context,
     scope: CoroutineScope,
-    val controller: PlayerController = PlayerController(),
+    commands: Flow<PlayerCommand>,
     videoConfig: GaplessVideoConfig = GaplessVideoConfig(),
     webConfig: GaplessWebConfig = GaplessWebConfig(),
 ) {
@@ -49,7 +55,7 @@ internal class PlayerOrchestrator(
         image.onError = { assetId, message -> onPreloadError?.invoke(assetId, message) }
 
         scope.launch {
-            controller.commands.collect { command ->
+            commands.collect { command ->
                 when (command) {
                     is PlayerCommand.Prepare -> prepare(command.item)
                     is PlayerCommand.Play    -> play(command.item)
