@@ -24,6 +24,7 @@ import io.github._514sid.gapless.GaplessEvent
 import io.github._514sid.gapless.GaplessController
 import io.github._514sid.gapless.GaplessPlayer
 import io.github._514sid.gapless.GaplessRotation
+import io.github._514sid.gapless.GaplessVideoConfig
 import kotlinx.coroutines.launch
 
 class PlayerActivity : ComponentActivity() {
@@ -48,7 +49,30 @@ class PlayerActivity : ComponentActivity() {
             window.setSustainedPerformanceMode(true)
         }
 
-        val assets = emptyList<Pair<GaplessAsset, Long>>()
+        val slotMs = 10_000L
+        val assets = listOf(
+            GaplessAsset(
+                id = "horse1",
+                uri = "android.resource://$packageName/raw/horse1",
+                mimeType = "video/mp4",
+                width = 1920,
+                height = 1080,
+                durationMs = slotMs,
+            ) to slotMs,
+            GaplessAsset(
+                id = "horse2",
+                uri = "android.resource://$packageName/raw/horse2",
+                mimeType = "video/mp4",
+                width = 1920,
+                height = 1080,
+                durationMs = slotMs,
+            ) to slotMs,
+             GaplessAsset(
+                 id = "google",
+                 uri = "https://google.com",
+                 mimeType = "text/html",
+             ) to slotMs,
+        )
         val durations = assets.associate { (asset, duration) -> asset.id to duration }
         var index = 0
         var timerJob: Job? = null
@@ -97,6 +121,12 @@ class PlayerActivity : ComponentActivity() {
                         modifier = Modifier.fillMaxSize(),
                         manager = manager,
                         rotation = GaplessRotation.Deg0,
+                        // maxBufferMs >= the clip length so ExoPlayer can preload the next clip
+                        // across the whole slot instead of only its final few seconds.
+                        videoConfig = GaplessVideoConfig(
+                            minBufferMs = 2_000,
+                            maxBufferMs = 12_000,
+                        ),
                     )
                 }
             }

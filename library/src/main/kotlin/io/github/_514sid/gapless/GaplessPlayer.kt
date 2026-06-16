@@ -1,6 +1,5 @@
 package io.github._514sid.gapless
 
-import android.view.TextureView
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
@@ -15,7 +14,6 @@ import io.github._514sid.gapless.internal.ActiveContent
 import io.github._514sid.gapless.internal.PlayerOrchestrator
 import io.github._514sid.gapless.internal.RotatedContainer
 import io.github._514sid.gapless.internal.image.ImagePlayer
-import io.github._514sid.gapless.internal.video.VideoPlayer
 import io.github._514sid.gapless.internal.web.WebPlayer
 
 @Composable
@@ -53,14 +51,7 @@ fun GaplessPlayer(
         RotatedContainer(rotation = rotation.degrees) {
             val active = orchestrator.activeContent
 
-            VideoPlayer(
-                state = orchestrator.video.renderState,
-                onTextureViewCreated = { view ->
-                    view.isOpaque = true
-                    orchestrator.video.textureViewRef = view
-                },
-                modifier = Modifier.fillMaxSize()
-            )
+            orchestrator.video.Content(modifier = Modifier.fillMaxSize())
 
             ImagePlayer(
                 state = orchestrator.image.renderState,

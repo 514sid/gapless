@@ -23,6 +23,9 @@ captures/
 .DS_Store
 Thumbs.db
 
+# Sample media — supply your own under app/src/main/res/raw/
+app/src/main/res/raw/*.mp4
+
 # Secrets — never commit these
 *.keystore
 *.jks

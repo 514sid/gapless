@@ -9,6 +9,12 @@ package io.github._514sid.gapless
  * @property refreshIntervalMs Reload interval in milliseconds for web assets. Null means no auto-refresh.
  * @property volume Playback volume for video assets, from 0.0 (silent) to 1.0 (full). Defaults to 0.0.
  * Non-video assets ignore this field.
+ * @property durationMs Optional video-only clip length, in milliseconds. When set, the video is clipped
+ * to this duration so ExoPlayer can begin buffering the next clip well before the transition instead of
+ * only in the final [GaplessVideoConfig.maxBufferMs] window of a long clip. The host still drives the
+ * transition with [GaplessController.play]; if the clip reaches this end before then, it holds on the
+ * last frame (it never auto-advances). For the largest preload benefit, pair this with a
+ * [GaplessVideoConfig.maxBufferMs] at least as large as the clip. VOD only; leave null for live streams.
  */
 data class GaplessAsset(
     val id: String,
@@ -18,6 +24,7 @@ data class GaplessAsset(
     val height: Int? = null,
     val refreshIntervalMs: Long? = null,
     val volume: Float = 0f,
+    val durationMs: Long? = null,
 ) {
     constructor(
         id: Int,
@@ -27,6 +34,7 @@ data class GaplessAsset(
         height: Int? = null,
         refreshIntervalMs: Long? = null,
         volume: Float = 0f,
+        durationMs: Long? = null,
     ) : this(
         id = id.toString(),
         uri = uri,
@@ -35,6 +43,7 @@ data class GaplessAsset(
         height = height,
         refreshIntervalMs = refreshIntervalMs,
         volume = volume,
+        durationMs = durationMs,
     )
 
     companion object {

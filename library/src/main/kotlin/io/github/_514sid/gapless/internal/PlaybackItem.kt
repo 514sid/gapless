@@ -20,6 +20,7 @@ internal sealed class PlaybackItem {
         override val width: Int,
         override val height: Int,
         val volume: Float = 0f,
+        val durationMs: Long? = null,
     ) : PlaybackItem()
 
     data class Image(

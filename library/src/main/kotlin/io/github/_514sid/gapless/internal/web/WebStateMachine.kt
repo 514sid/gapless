@@ -87,6 +87,7 @@ internal class WebStateMachine(
         refreshJob?.cancel()
 
         val target = inactiveSlot
+        val alreadyCommitted = pendingItem?.playbackId == item.playbackId && pageCommitted
 
         if (pendingItem?.playbackId != item.playbackId) {
             Log.w(TAG, "play(): Item was NOT pending! Forcing immediate load.")
@@ -96,6 +97,24 @@ internal class WebStateMachine(
         }
 
         pendingItem = null
+
+        if (alreadyCommitted) {
+            // The preloaded page has already painted, so swap synchronously. Deferring to a
+            // coroutine here lets a subsequent cancelPrepare() (fired when the next, non-web asset
+            // is prepared) cancel the swap before it applies, leaving a blank slot on screen.
+            Log.d(TAG, "play(): Already committed, swapping immediately to slot $target.")
+            renderState = renderState.copy(activeSlot = target)
+            transitionJob = scope.launch {
+                delay(150)
+                if (renderState.activeSlot == target) {
+                    inactiveWebView.loadBlank()
+                }
+                if (item.refreshIntervalMs > 0L) {
+                    startSeamlessRefreshLoop(item)
+                }
+            }
+            return
+        }
 
         transitionJob = scope.launch {
             Log.d(TAG, "play(): Waiting for page to visually commit before swapping...")
@@ -252,6 +271,8 @@ internal class WebStateMachine(
             mixedContentMode = config.mixedContentMode
             useWideViewPort = true
             loadWithOverviewMode = true
+            minimumFontSize = 1
+            minimumLogicalFontSize = 1
             if (config.userAgent != null) userAgentString = config.userAgent
         }
 
