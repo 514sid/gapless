@@ -271,6 +271,8 @@ internal class WebStateMachine(
             mixedContentMode = config.mixedContentMode
             useWideViewPort = true
             loadWithOverviewMode = true
+            minimumFontSize = 1
+            minimumLogicalFontSize = 1
             if (config.userAgent != null) userAgentString = config.userAgent
         }
 

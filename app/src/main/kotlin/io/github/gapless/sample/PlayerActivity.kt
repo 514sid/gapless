@@ -67,11 +67,11 @@ class PlayerActivity : ComponentActivity() {
                 height = 1080,
                 durationMs = slotMs,
             ) to slotMs,
-            GaplessAsset(
-                id = "google",
-                uri = "https://google.com",
-                mimeType = "text/html",
-            ) to slotMs,
+             GaplessAsset(
+                 id = "google",
+                 uri = "https://google.com",
+                 mimeType = "text/html",
+             ) to slotMs,
         )
         val durations = assets.associate { (asset, duration) -> asset.id to duration }
         var index = 0
