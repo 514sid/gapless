@@ -18,13 +18,13 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import io.github._514sid.gapless.GaplessAsset
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.delay
 import io.github._514sid.gapless.GaplessEvent
 import io.github._514sid.gapless.GaplessController
 import io.github._514sid.gapless.GaplessPlayer
 import io.github._514sid.gapless.GaplessRotation
-import io.github._514sid.gapless.GaplessVideoConfig
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
 class PlayerActivity : ComponentActivity() {
@@ -74,31 +74,35 @@ class PlayerActivity : ComponentActivity() {
              ) to slotMs,
         )
         val durations = assets.associate { (asset, duration) -> asset.id to duration }
-        var index = 0
-        var timerJob: Job? = null
 
         val manager = GaplessController(scope = lifecycleScope, preloadMs = 3_000)
 
+        // Control loop: own the playlist and timing. Anchor each slot's timer to currentState so the
+        // duration starts when the asset is actually on screen, not when play() was called.
         if (assets.isNotEmpty()) {
-            manager.start(assets[index++].first)
+            lifecycleScope.launch {
+                var index = 0
+                manager.start(assets[index].first)
+                while (isActive) {
+                    val current = assets[index % assets.size].first
+                    manager.currentState.first { it?.asset?.id == current.id }
+
+                    val next = assets[(index + 1) % assets.size].first
+                    manager.prepareNext(next)
+                    delay(durations[current.id] ?: 10_000L)
+                    manager.play(next)
+                    index++
+                }
+            }
         }
 
+        // Events are observability only.
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
                 manager.events.collect { event ->
                     when (event) {
-                        is GaplessEvent.Started -> {
+                        is GaplessEvent.Started ->
                             Log.d(TAG, "Started: ${event.asset.id} [${event.playbackId}]")
-                            if (assets.isNotEmpty()) {
-                                timerJob?.cancel()
-                                val next = assets[index++ % assets.size].first
-                                manager.prepareNext(next)
-                                timerJob = launch {
-                                    delay(durations[event.asset.id] ?: return@launch)
-                                    manager.play(next)
-                                }
-                            }
-                        }
                         is GaplessEvent.Ended ->
                             Log.d(TAG, "Ended: ${event.asset.id} [${event.playbackId}]")
                         is GaplessEvent.PlaybackError ->
@@ -121,12 +125,6 @@ class PlayerActivity : ComponentActivity() {
                         modifier = Modifier.fillMaxSize(),
                         manager = manager,
                         rotation = GaplessRotation.Deg0,
-                        // maxBufferMs >= the clip length so ExoPlayer can preload the next clip
-                        // across the whole slot instead of only its final few seconds.
-                        videoConfig = GaplessVideoConfig(
-                            minBufferMs = 2_000,
-                            maxBufferMs = 12_000,
-                        ),
                     )
                 }
             }

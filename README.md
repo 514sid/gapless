@@ -16,6 +16,7 @@ Plays video, images, and web content in a continuous loop. Transitions are prelo
 
 - **Zero black frames** — next asset is buffered before the current one finishes
 - **Mixed media** — video (MP4, HLS, DASH, RTSP via ExoPlayer), images (Coil), and web pages (WebView) in the same playlist
+- **Selectable video strategy** — seamless A/B dual-ExoPlayer by default, or an experimental single-ExoPlayer mode for single-decoder hardware
 - **Rotation** — built-in 0/90/180/270 degree content rotation without affecting the composable's layout bounds
 
 ---
@@ -24,7 +25,7 @@ Plays video, images, and web content in a continuous loop. Transitions are prelo
 
 ```kotlin
 dependencies {
-    implementation("io.github.514sid:gapless:0.0.13")
+    implementation("io.github.514sid:gapless:0.2.0")
 }
 ```
 
@@ -46,24 +47,28 @@ class MainActivity : ComponentActivity() {
             Asset(GaplessAsset(id = "poster",      uri = "https://example.com/poster.jpg", mimeType = "image/jpeg"), 8_000L),
         )
 
-        var index = 0
-        var timerJob: Job? = null
-        val manager = GaplessPlaylistManager(scope = lifecycleScope)
-        manager.start(assets[index++].spec)
+        val manager = GaplessController(scope = lifecycleScope)
 
+        // Drive the loop from your own coroutine. Anchor each slot's timer to currentState, so the
+        // duration starts when the asset is actually on screen (not when play() was called).
         lifecycleScope.launch {
-            manager.events.collect { event ->
-                if (event is GaplessEvent.Started) {
-                    timerJob?.cancel()
-                    val current = assets.first { it.spec.id == event.asset.id }
-                    val next = assets[index++ % assets.size]
-                    manager.prepareNext(next.spec)
-                    timerJob = launch {
-                        delay(current.durationMs)
-                        manager.play(next.spec)
-                    }
-                }
+            var index = 0
+            manager.start(assets[index].spec)
+            while (isActive) {
+                val current = assets[index % assets.size]
+                manager.currentState.first { it?.asset?.id == current.spec.id }
+
+                val next = assets[(index + 1) % assets.size]
+                manager.prepareNext(next.spec)
+                delay(current.durationMs)
+                manager.play(next.spec)
+                index++
             }
+        }
+
+        // Events are for observability only (logging, error handling).
+        lifecycleScope.launch {
+            manager.events.collect { event -> Log.d("Gapless", "$event") }
         }
 
         setContent {
@@ -73,37 +78,43 @@ class MainActivity : ComponentActivity() {
 }
 ```
 
+> Drive the playlist from a coroutine you own and treat `events` as log-only. The `events` flow has
+> `replay = 1`, so a collector that restarts (for example under `repeatOnLifecycle`) re-receives the last
+> event; using it to drive transitions can re-fire `prepareNext`/`play`. `currentState` is a conflated
+> `StateFlow`, so awaiting it is idempotent.
+
 ---
 
 ## API
 
-### `GaplessPlaylistManager`
+### `GaplessController`
 
 Owns the playback loop. Create it once, call `start` with a callback that returns the next asset to play.
 
 ```kotlin
-val manager = GaplessPlaylistManager(
+val manager = GaplessController(
     scope     = lifecycleScope, // cancelled automatically with the scope
     preloadMs = 3_000,          // how early to buffer the next asset
 )
 ```
 
-Call `start` with the first asset. On each `Started` event, call `prepareNext` to begin buffering the next asset and `play` when it is time to transition. The host controls all timing.
+Call `start` with the first asset. From a coroutine you own, wait until the asset is on screen (via
+`currentState`), call `prepareNext` to begin buffering the next asset, then `play` when it is time to
+transition. The host controls all timing.
 
 ```kotlin
 val durations = mapOf("promo-video" to 15_000L, "poster" to 8_000L)
-manager.start(firstAsset)
 
 lifecycleScope.launch {
-    manager.events.collect { event ->
-        if (event is GaplessEvent.Started) {
-            val next = nextAsset()
-            manager.prepareNext(next)
-            launch {
-                delay(durations[event.asset.id] ?: return@launch)
-                manager.play(next)
-            }
-        }
+    manager.start(firstAsset)
+    var current = firstAsset
+    while (isActive) {
+        manager.currentState.first { it?.asset?.id == current.id }
+        val next = nextAsset()
+        manager.prepareNext(next)
+        delay(durations[current.id] ?: 10_000L)
+        manager.play(next)
+        current = next
     }
 }
 ```
@@ -111,7 +122,7 @@ lifecycleScope.launch {
 | Method / Property | Description |
 | :---------------- | :---------- |
 | `start(asset)` | Begin playback with the given asset. |
-| `prepareNext(asset)` | Start buffering the next asset. Call this early — as soon as `Started` fires — so it is ready when `play` is called. |
+| `prepareNext(asset)` | Start buffering the next asset. Call this early — as soon as the current asset is on screen — so it is ready when `play` is called. |
 | `play(asset)` | Transition to the asset. If already preloading, transitions immediately. If not, prepares it first and plays as soon as the renderer is ready. |
 | `stop()` | Cancel all coroutines and halt playback. |
 | `events: SharedFlow<GaplessEvent>` | Stream of playback events (collect in a coroutine). |
@@ -121,7 +132,7 @@ lifecycleScope.launch {
 
 ### `GaplessPlayer`
 
-The Compose entry point. Pair it with a `GaplessPlaylistManager`.
+The Compose entry point. Pair it with a `GaplessController`.
 
 ```kotlin
 GaplessPlayer(
@@ -129,6 +140,7 @@ GaplessPlayer(
     manager      = manager,
     rotation     = GaplessRotation.Deg90,
     videoConfig  = GaplessVideoConfig(         // optional; shown with non-default values
+        strategy                            = GaplessVideoStrategy.DUAL_INSTANCE,
         enableDecoderFallback               = true,
         minBufferMs                         = 2_000,
         maxBufferMs                         = 8_000,
@@ -145,6 +157,13 @@ GaplessPlayer(
 ```
 
 When the asset list is empty, the player renders nothing (transparent/black).
+
+**Video strategy (`GaplessVideoStrategy`).** Controls how video playback is backed:
+
+| Strategy | Decoders | Behavior |
+| :------- | :------- | :------- |
+| `DUAL_INSTANCE` (default) | Two during a transition | Two ExoPlayers in an A/B swap. The next clip is staged and its first frame rendered on a hidden player, then the visible slot flips for a seamless cut. |
+| `SINGLE_INSTANCE_EXPERIMENTAL` | One | A single ExoPlayer reusing one timeline. Uses one decoder at a time but re-initializes it on each cut. Use only on hardware limited to a single decoder. |
 
 ---
 
@@ -167,21 +186,10 @@ GaplessAsset(
 )
 ```
 
-**`durationMs` (video only).** Without it, a clip plays its full natural length and ExoPlayer only begins
-buffering the next clip in the final `maxBufferMs` window, so a long clip can transition with a rebuffer.
-Setting `durationMs` clips the video to that length, which lets ExoPlayer start loading the next clip far
-earlier. For the largest benefit, pair it with a [`GaplessVideoConfig.maxBufferMs`](#gaplessplayer) at least as
-large as the clip:
-
-```kotlin
-GaplessPlayer(
-    manager     = manager,
-    videoConfig = GaplessVideoConfig(maxBufferMs = 12_000), // >= the clip length
-)
-```
-
-The host still drives the transition with `play()`. If a clip reaches its `durationMs` end before then, it holds
-on the last frame and never auto-advances. Leave `durationMs` null for live streams (HLS/DASH/RTSP).
+**`durationMs` (video only).** Clips the video to the given length so it ends at a fixed point instead of
+playing its full natural length. The host still drives the transition with `play()`; if a clip reaches its
+`durationMs` end before then, it holds on the last frame and never auto-advances. Leave `durationMs` null for
+live streams (HLS/DASH/RTSP).
 
 **MIME type to renderer mapping:**
 
@@ -206,6 +214,7 @@ lifecycleScope.launch {
             is GaplessEvent.Preloading    -> log("Buffering next: ${event.asset.id}")
             is GaplessEvent.PlaybackError -> log("Error on ${event.asset.id}: ${event.message}")
             is GaplessEvent.PreloadMissed -> log("Preload not ready for ${event.asset.id}: took ${event.elapsedMs}ms")
+            is GaplessEvent.PreloadError  -> log("Preload failed for ${event.asset.id}: ${event.message}")
         }
     }
 }
@@ -227,7 +236,6 @@ data class Asset(val spec: GaplessAsset, val durationMs: Long)
 val all: List<Asset> = listOf(/* ... */)
 val shuffled = all.shuffled().toMutableList()
 var index = 0
-val durations = all.associate { it.spec.id to it.durationMs }
 
 fun nextShuffled(): Asset {
     if (index >= shuffled.size) {
@@ -237,18 +245,16 @@ fun nextShuffled(): Asset {
     return shuffled[index++]
 }
 
-manager.start(nextShuffled().spec)
-
 lifecycleScope.launch {
-    manager.events.collect { event ->
-        if (event is GaplessEvent.Started) {
-            val next = nextShuffled()
-            manager.prepareNext(next.spec)
-            launch {
-                delay(durations[event.asset.id] ?: return@launch)
-                manager.play(next.spec)
-            }
-        }
+    var current = nextShuffled()
+    manager.start(current.spec)
+    while (isActive) {
+        manager.currentState.first { it?.asset?.id == current.spec.id }
+        val next = nextShuffled()
+        manager.prepareNext(next.spec)
+        delay(current.durationMs)
+        manager.play(next.spec)
+        current = next
     }
 }
 ```
@@ -280,7 +286,7 @@ app process                           :player process
 +-----------------------------------------+    +------------------------------+
 |  MainActivity (thin launcher)           |    |  PlayerActivity              |
 |                                         |    |  GaplessPlayer composable    |
-|  WatchdogService (foreground) --- bind -+----+  GaplessPlaylistManager      |
+|  WatchdogService (foreground) --- bind -+----+  GaplessController      |
 |  detects crash, restarts player         |    |                              |
 +-----------------------------------------+    |  PlayerService               |
                                                |  (keepalive stub)            |
@@ -349,7 +355,11 @@ Without this, service workers will fail to make network requests and the page wi
 
 Each media type uses a different strategy to eliminate the gap:
 
-**Video** uses ExoPlayer's native 2-item media queue. When the next video is due, it is added as item[1] while item[0] is still playing. On transition, ExoPlayer seeks to item[1] and drops item[0]. The switch happens inside a single player instance with no surface swap. If the aspect ratio changes between clips, a bitmap snapshot of the last frame is captured and held on screen until the first frame of the next video renders, hiding any resize flicker.
+**Video** has two strategies, selected via `GaplessVideoConfig.strategy`.
+
+`DUAL_INSTANCE` (default) keeps two ExoPlayers as A/B slots, like the image and web players. While one slot plays, the next clip is prepared on the hidden slot, which buffers and renders its first frame into its own surface. On transition the visible slot flips so the cut is seamless, then the old slot is cleared to free its decoder. Two hardware decoders are alive only during the brief overlap around a transition.
+
+`SINGLE_INSTANCE_EXPERIMENTAL` uses one ExoPlayer with a 2-item queue. The next video is added as item[1] while item[0] plays; on transition the player advances to item[1] and drops item[0]. It uses a single decoder but re-initializes it on each cut, and if the aspect ratio changes a bitmap snapshot of the last frame is held until the next video's first frame renders, hiding the resize flicker.
 
 **Images** maintain two Coil slots (A and B) in the Compose hierarchy at all times. While one slot is visible, the other enqueues the next image with Coil in the background. On transition, the active slot index flips. Both slots stay composed so Coil keeps the decoded bitmap warm.
 
@@ -381,7 +391,7 @@ repositories {
 }
 
 dependencies {
-    implementation("com.github.514sid:gapless:v0.0.13")
+    implementation("com.github.514sid:gapless:v0.2.0")
 }
 ```
 
