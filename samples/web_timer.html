@@ -1,0 +1,54 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Gapless web timer</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #6b2a8a; color: #fff; overflow: hidden;
+    font-family: monospace; }
+  #labels { position: absolute; top: 2vh; left: 2vw; font-size: 4vh; text-shadow: 0.3vh 0.3vh #000; }
+  #labels small { display: block; font-size: 2.5vh; }
+  #timer { position: absolute; top: 34vh; width: 100%; text-align: center; font-size: 22vh;
+    font-weight: bold; text-shadow: 0.6vh 0.6vh #000; }
+  #frames { position: absolute; top: 62vh; width: 100%; text-align: center; font-size: 6vh;
+    text-shadow: 0.3vh 0.3vh #000; }
+  #bar { position: absolute; top: 20vh; bottom: 14vh; width: 1vw; background: #000; }
+  #strip { position: absolute; left: 2vw; right: 2vw; bottom: 3vh; height: 6vh; display: flex; gap: 2px; }
+  #strip div { flex: 1; background: #000; }
+  #strip div.on { background: #fff; }
+</style>
+</head>
+<body>
+<div id="labels">WEB PAGE<small>timer from page load, one strip cell per display frame</small>
+  <small>web_timer</small></div>
+<div id="bar"></div>
+<div id="timer">0:00.000</div>
+<div id="frames">F 0000</div>
+<div id="strip"></div>
+<script>
+  // Unlike the videos, this counts display frames, so the strip shows the screen's own rate
+  // and a stall shows up as the bar and strip stopping.
+  const strip = document.getElementById('strip');
+  const cells = 60;
+  for (let i = 0; i < cells; i++) strip.appendChild(document.createElement('div'));
+  const timer = document.getElementById('timer');
+  const frames = document.getElementById('frames');
+  const bar = document.getElementById('bar');
+  const start = performance.now();
+  let n = 0;
+  function tick(now) {
+    const ms = Math.floor(now - start);
+    const m = Math.floor(ms / 60000), s = Math.floor(ms / 1000) % 60, r = ms % 1000;
+    timer.textContent = m + ':' + String(s).padStart(2, '0') + '.' + String(r).padStart(3, '0');
+    frames.textContent = 'F ' + String(n + 1).padStart(4, '0');
+    strip.children[n % cells].className = 'on';
+    strip.children[(n + cells - 1) % cells].className = '';
+    bar.style.left = ((ms % 1000) / 10) + 'vw';
+    n++;
+    requestAnimationFrame(tick);
+  }
+  requestAnimationFrame(tick);
+</script>
+</body>
+</html>

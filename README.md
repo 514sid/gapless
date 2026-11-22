@@ -352,21 +352,13 @@ app process                           :player process
 
 **Running the sample:**
 
-Assets are defined in `PlayerActivity.onCreate()`. Swap in your own URIs and MIME types to test different content:
+The app plays generated test media from `app/src/main/assets/samples/`: clips with an on-screen timer, frame counter and first and last frame markers, still images, a web page, and deliberately broken files. Pick a playlist with a launch extra:
 
-```kotlin
-val assets = listOf(
-    GaplessAsset(
-        id       = "promo",
-        uri      = "android.resource://$packageName/raw/promo",
-        mimeType = "video/mp4",
-        width    = 3840,
-        height   = 2160
-    ) to 10_000L  // (asset, durationMs)
-)
+```sh
+adb shell am start -S -n io.github.gapless.sample/.MainActivity --es playlist codecs
 ```
 
-Place raw video files under `app/src/main/res/raw/`.
+`samples/README.md` lists every asset and playlist, the other extras (volume, device clock overlay), and how to regenerate the media.
 
 **Not seeing the `Started`/`Ended`/`Preloading` logs?** Some locked-down devices (e.g. Fire TV) ship with
 `persist.log.tag = I`, which raises the global logcat level to `INFO` and drops every `Log.d` call. Playback

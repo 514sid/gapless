@@ -11,6 +11,7 @@ import android.content.Intent
 import android.content.ServiceConnection
 import android.content.pm.ServiceInfo
 import android.os.Build
+import android.os.Bundle
 import android.os.IBinder
 import android.util.Log
 import androidx.core.app.NotificationCompat
@@ -24,6 +25,9 @@ class WatchdogService : Service() {
         private const val NOTIFICATION_ID = 1
         private const val CHANNEL_ID = "watchdog"
     }
+
+    // The launch extras from MainActivity, kept so a restarted player plays the same playlist.
+    private var playerExtras: Bundle? = null
 
     private val playerConnection = object : ServiceConnection {
         override fun onServiceConnected(name: ComponentName, binder: IBinder) {
@@ -44,9 +48,10 @@ class WatchdogService : Service() {
 
     @SuppressLint("InlinedApi")
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        intent?.extras?.let { playerExtras = it }
         val tapIntent = PendingIntent.getActivity(
             this, 0,
-            Intent(this, PlayerActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+            playerIntent(),
             PendingIntent.FLAG_IMMUTABLE
         )
         val notification = NotificationCompat.Builder(this, CHANNEL_ID)
@@ -75,6 +80,11 @@ class WatchdogService : Service() {
         // FLAG_ACTIVITY_NEW_TASK required from non-Activity context.
         // On Android 12+ the OS may suppress background activity starts; in that case
         // tapping the persistent notification brings the player back.
-        startActivity(Intent(this, PlayerActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+        startActivity(playerIntent())
     }
+
+    private fun playerIntent(): Intent =
+        Intent(this, PlayerActivity::class.java)
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            .apply { playerExtras?.let { putExtras(it) } }
 }

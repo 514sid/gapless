@@ -7,7 +7,8 @@ import androidx.activity.ComponentActivity
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        startForegroundService(Intent(this, WatchdogService::class.java))
+        // Extras (playlist, volume, clock) pass through to PlayerActivity.
+        startForegroundService(Intent(this, WatchdogService::class.java).putExtras(intent))
         finish()
     }
 }

@@ -37,3 +37,5 @@ secrets.properties
 # Claude
 
 .claude
+# Python venv for samples/generate.py
+.venv/
