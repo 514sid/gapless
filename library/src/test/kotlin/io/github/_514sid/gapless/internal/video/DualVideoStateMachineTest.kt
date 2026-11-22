@@ -215,6 +215,42 @@ class DualVideoStateMachineTest {
     }
 
     @Test
+    fun `the playing clip losing its decoder on two cuts in a row switches to hard cuts`() {
+        start()
+        val a = video("a")
+        playFirst(a)
+        val b = video("b")
+        cutAfterReclaim(playing = a, next = b)
+        val c = video("c")
+        cutAfterReclaim(playing = b, next = c)
+
+        val d = video("d")
+        engine.prepare(d)
+        assertEquals("staging no longer opens a second decoder", 0, playerOf(d).preparesSinceMedia)
+        assertTrue(engine.isNextReady)
+    }
+
+    @Test
+    fun `a clean cut between two reclaims keeps seamless cuts`() {
+        start()
+        val a = video("a")
+        playFirst(a)
+        val b = video("b")
+        cutAfterReclaim(playing = a, next = b)
+        val c = video("c")
+        engine.prepare(c)
+        playerOf(c).firstFrame()
+        engine.play(c) // no reclaim on this cut
+        val d = video("d")
+        cutAfterReclaim(playing = c, next = d)
+
+        val e = video("e")
+        engine.prepare(e)
+        assertEquals(1, playerOf(e).preparesSinceMedia)
+        assertFalse(engine.isNextReady)
+    }
+
+    @Test
     fun `a queued retry for a clip that gets parked is dropped`() {
         start()
         val a = video("a")
@@ -350,6 +386,19 @@ class DualVideoStateMachineTest {
         playerOf(b).error(PlaybackException.ERROR_CODE_DECODER_INIT_FAILED)
         engine.play(b)
         playerOf(b).apply {
+            firstFrame()
+            playbackState = Player.STATE_READY
+        }
+    }
+
+    /** Stages [next], has [playing] lose its decoder, then cuts to [next] and lets it draw. */
+    private fun cutAfterReclaim(playing: PlaybackItem.Video, next: PlaybackItem.Video) {
+        engine.prepare(next)
+        playerOf(next).firstFrame()
+        playerOf(playing).error(PlaybackException.ERROR_CODE_DECODING_RESOURCES_RECLAIMED)
+        assertTrue("the staged clip is parked", engine.isNextReady)
+        engine.play(next)
+        playerOf(next).apply {
             firstFrame()
             playbackState = Player.STATE_READY
         }

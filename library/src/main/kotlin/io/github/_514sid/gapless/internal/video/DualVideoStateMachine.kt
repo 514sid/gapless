@@ -105,6 +105,16 @@ internal class DualVideoStateMachine(
     /** Whether the incoming clip of the current hard cut has had its quick decoder retry. */
     private var cutRetryUsed = false
 
+    /**
+     * Cuts in a row whose playing clip lost its decoder while the next clip was staged. One is
+     * noise (another app took the codec); two in a row means staging the next clip is what costs
+     * the playing one its decoder, so hard cuts are the fix.
+     */
+    private var reclaimStreak = 0
+
+    /** Whether the playing clip lost its decoder to a staged one since the last cut. */
+    private var reclaimedSinceCut = false
+
     private var released = false
 
     // Stall watchdog state for the current slot.
@@ -219,6 +229,8 @@ internal class DualVideoStateMachine(
         currentSlot = target
         resetWatchdog()
         startWatchdog()
+        if (!reclaimedSinceCut) reclaimStreak = 0
+        reclaimedSinceCut = false
 
         if (deferred[target]) {
             // Hard cut: free the outgoing clip's decoder, then open the incoming one. The outgoing
@@ -336,9 +348,20 @@ internal class DualVideoStateMachine(
                 trialPlaybackId = items[staged]?.playbackId
             }
         } else {
-            // The playing clip lost its decoder (reclaimed by another app, say). That proves
-            // nothing about running two, so park the staged clip for this one cut only.
-            Log.w(TAG, "Playing clip lost its decoder; next cut is a hard cut")
+            // The playing clip lost its decoder. Once, that proves nothing about running two (another
+            // app may have taken it), so the staged clip is parked for this one cut only. On a
+            // second cut in a row, staging is the cause: switch to hard cuts.
+            if (!reclaimedSinceCut) {
+                reclaimedSinceCut = true
+                reclaimStreak++
+            }
+            if (reclaimStreak >= RECLAIM_STREAK_FOR_HARD_CUTS && !singleDecoderMode) {
+                Log.w(TAG, "Playing clip lost its decoder on $reclaimStreak cuts in a row; switching to hard cuts")
+                singleDecoderMode = true
+                trialPlaybackId = null
+            } else {
+                Log.w(TAG, "Playing clip lost its decoder; next cut is a hard cut")
+            }
         }
         // Park the staged clip without a decoder; play() opens it at the cut. Its player is idle
         // after the error (or is stopped here), and keeps its media item for that later prepare().
@@ -476,6 +499,8 @@ internal class DualVideoStateMachine(
         currentSlot = 0
         pendingFlip = -1
         if (trialPlaybackId != null) endTrial("playback was cleared")
+        reclaimStreak = 0
+        reclaimedSinceCut = false
         stopWatchdog()
         resetWatchdog()
         renderState = renderState.copy(activeSlot = 0)
@@ -525,6 +550,7 @@ internal class DualVideoStateMachine(
         const val TAG = "GaplessVideo"
         const val RETRY_DELAY_MS = 1_000L
         const val CUT_RETRY_DELAY_MS = 150L
+        const val RECLAIM_STREAK_FOR_HARD_CUTS = 2
         const val RETRY_FORGET_MS = 30_000L
         const val WATCHDOG_INTERVAL_MS = 1_000L
     }
