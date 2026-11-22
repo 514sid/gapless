@@ -9,31 +9,26 @@ internal sealed class PlaybackItem {
     var startedAt: Long = 0L
     var assetId: String = ""
 
-    abstract val width: Int
-    abstract val height: Int
-
-    val targetAspectRatio: Float
-        get() = if (height > 0) width.toFloat() / height.toFloat() else 16f / 9f
-
+    /**
+     * @param aspectRatioHint Width / height from the asset's declared size, used to lay out the
+     * slot before the decoder reports the real video size. Null when the asset declared no size.
+     */
     data class Video(
         val uri: Uri,
-        override val width: Int,
-        override val height: Int,
+        val mimeType: String,
+        val aspectRatioHint: Float? = null,
         val volume: Float = 0f,
         val durationMs: Long? = null,
     ) : PlaybackItem()
 
     data class Image(
         val model: Any,
-        override val width: Int,
-        override val height: Int
+        val width: Int,
+        val height: Int
     ) : PlaybackItem()
 
     data class Web(
         val url: String,
         val refreshIntervalMs: Long = 0L
-    ) : PlaybackItem() {
-        override val width = 0
-        override val height = 0
-    }
+    ) : PlaybackItem()
 }

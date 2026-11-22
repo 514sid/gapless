@@ -54,13 +54,20 @@ internal class PlayerOrchestrator(
 
     private var preparedPlaybackId: UUID? = null
 
-    val isNextReady: Boolean
-        get() = when (lastPreparedContent) {
+    /**
+     * Whether the item with [playbackId] has been staged and can render. Returns false until the
+     * matching Prepare command has been processed, so a caller polling right after sending Prepare
+     * never sees the previous item's readiness. Main thread only.
+     */
+    fun isReady(playbackId: UUID): Boolean {
+        if (preparedPlaybackId != playbackId) return false
+        return when (lastPreparedContent) {
             ActiveContent.IMAGE -> image.isPrepareComplete
             ActiveContent.WEB   -> web.pageCommitted
             ActiveContent.VIDEO -> video.isNextReady
-            ActiveContent.NONE  -> true
+            ActiveContent.NONE  -> false
         }
+    }
 
     var onError: ((String) -> Unit)? = null
     var onPreloadError: ((assetId: String, message: String) -> Unit)? = null
@@ -69,6 +76,7 @@ internal class PlayerOrchestrator(
     init {
         video.onErrorCallback = { message -> onError?.invoke(message) }
         video.onPreloadErrorCallback = { assetId, message -> onPreloadError?.invoke(assetId, message) }
+        web.onError = { message -> onError?.invoke(message) }
         web.onPreloadError = { assetId, message -> onPreloadError?.invoke(assetId, message) }
         image.onError = { assetId, message -> onPreloadError?.invoke(assetId, message) }
 

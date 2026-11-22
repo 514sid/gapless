@@ -46,9 +46,11 @@ internal class ImageStateMachine(
 
     private var prepareJob: Job? = null
     private var pendingItem: PlaybackItem.Image? = null
+    @Volatile private var prepareFailed = false // set from the IO load job
 
+    /** True once the staged image has decoded. A failed load never becomes ready. */
     val isPrepareComplete: Boolean
-        get() = prepareJob?.isActive != true
+        get() = prepareJob?.isActive != true && !prepareFailed
 
     private val inactiveSlot: Int
         get() = if (renderState.activeSlot == 0) 1 else 0
@@ -56,6 +58,7 @@ internal class ImageStateMachine(
     fun prepare(item: PlaybackItem.Image) {
         prepareJob?.cancel()
         pendingItem = item
+        prepareFailed = false
 
         renderState = renderState.setSlot(
             slot = inactiveSlot,
@@ -75,6 +78,7 @@ internal class ImageStateMachine(
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
+                prepareFailed = true
                 onError?.invoke(item.assetId, e.message ?: "Image load failed")
             }
         }
@@ -83,6 +87,7 @@ internal class ImageStateMachine(
     fun play(item: PlaybackItem.Image) {
         prepareJob?.cancel()
         prepareJob = null
+        prepareFailed = false
 
         val target = inactiveSlot
 
@@ -107,6 +112,7 @@ internal class ImageStateMachine(
     fun clear() {
         prepareJob?.cancel()
         prepareJob = null
+        prepareFailed = false
         pendingItem = null
         renderState = ImagePlayerState()
     }
