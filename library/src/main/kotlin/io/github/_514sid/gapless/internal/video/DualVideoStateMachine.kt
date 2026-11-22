@@ -46,6 +46,8 @@ import java.util.UUID
 internal class DualVideoStateMachine(
     private val context: Context,
     private val config: GaplessVideoConfig = GaplessVideoConfig(),
+    /** Creates each slot's player; tests substitute a scripted one. */
+    private val createExoPlayer: (Context, GaplessVideoConfig) -> ExoPlayer = ::defaultExoPlayer,
 ) : VideoEngine {
 
     private val handler = Handler(Looper.getMainLooper())
@@ -503,21 +505,7 @@ internal class DualVideoStateMachine(
     }
 
     private fun buildPlayer(slot: Int): ExoPlayer =
-        ExoPlayer.Builder(context)
-            .setRenderersFactory(
-                DefaultRenderersFactory(context).setEnableDecoderFallback(config.enableDecoderFallback)
-            )
-            .setLoadControl(
-                DefaultLoadControl.Builder()
-                    .setBufferDurationsMs(
-                        config.minBufferMs,
-                        config.maxBufferMs,
-                        config.bufferForPlaybackMs,
-                        config.bufferForPlaybackAfterRebufferMs,
-                    )
-                    .build()
-            )
-            .build()
+        createExoPlayer(context, config)
             .apply {
                 videoScalingMode = C.VIDEO_SCALING_MODE_SCALE_TO_FIT
                 repeatMode = Player.REPEAT_MODE_OFF
@@ -541,3 +529,21 @@ internal class DualVideoStateMachine(
         const val WATCHDOG_INTERVAL_MS = 1_000L
     }
 }
+
+@OptIn(UnstableApi::class)
+private fun defaultExoPlayer(context: Context, config: GaplessVideoConfig): ExoPlayer =
+    ExoPlayer.Builder(context)
+        .setRenderersFactory(
+            DefaultRenderersFactory(context).setEnableDecoderFallback(config.enableDecoderFallback)
+        )
+        .setLoadControl(
+            DefaultLoadControl.Builder()
+                .setBufferDurationsMs(
+                    config.minBufferMs,
+                    config.maxBufferMs,
+                    config.bufferForPlaybackMs,
+                    config.bufferForPlaybackAfterRebufferMs,
+                )
+                .build()
+        )
+        .build()
