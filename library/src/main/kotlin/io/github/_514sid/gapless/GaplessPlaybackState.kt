@@ -9,7 +9,7 @@ import java.util.UUID
  * @param playbackId Unique id for this specific playback instance, matching [GaplessEvent.Started.playbackId].
  * @param startedAt Epoch milliseconds when playback of this asset began.
  */
-data class GaplessPlaybackState(
+public data class GaplessPlaybackState(
     val asset: GaplessAsset,
     val playbackId: UUID,
     val startedAt: Long,

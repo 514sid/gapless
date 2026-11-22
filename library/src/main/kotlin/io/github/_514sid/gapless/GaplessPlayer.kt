@@ -28,7 +28,7 @@ import java.util.UUID
  * commands between them.
  */
 @Composable
-fun GaplessPlayer(
+public fun GaplessPlayer(
     controller: GaplessController,
     modifier: Modifier = Modifier,
     rotation: GaplessRotation = GaplessRotation.Deg0,

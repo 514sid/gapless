@@ -1,7 +1,7 @@
 package io.github._514sid.gapless
 
 /** Selects how video playback is backed. */
-enum class GaplessVideoStrategy {
+public enum class GaplessVideoStrategy {
     /** Two ExoPlayers in an A/B swap. Seamless cuts; uses two decoders during a transition. Default. */
     DUAL_INSTANCE,
 
@@ -22,7 +22,7 @@ enum class GaplessVideoStrategy {
  * @param bufferForPlaybackMs Duration of media buffered before playback starts or resumes, in milliseconds.
  * @param bufferForPlaybackAfterRebufferMs Duration of media buffered to resume after a rebuffer, in milliseconds.
  */
-data class GaplessVideoConfig(
+public data class GaplessVideoConfig(
     val strategy: GaplessVideoStrategy = GaplessVideoStrategy.DUAL_INSTANCE,
     val enableDecoderFallback: Boolean = false,
     val minBufferMs: Int = 1_000,

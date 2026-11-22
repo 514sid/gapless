@@ -36,6 +36,11 @@ android {
     }
 }
 
+kotlin {
+    // Public declarations must state their visibility, so internals can't leak into the API by accident.
+    explicitApi()
+}
+
 dependencies {
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.compose.ui)
