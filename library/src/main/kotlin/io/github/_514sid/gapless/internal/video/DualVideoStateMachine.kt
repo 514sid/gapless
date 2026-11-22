@@ -118,6 +118,10 @@ internal class DualVideoStateMachine(
         override fun run() {
             if (released || !watchdogRunning) return
             checkForStall()
+            // checkForStall() can fail the clip and stop the watchdog; don't revive it then. The
+            // removeCallbacks keeps one chain at most, whatever ran in between.
+            if (!watchdogRunning) return
+            handler.removeCallbacks(this)
             handler.postDelayed(this, WATCHDOG_INTERVAL_MS)
         }
     }
@@ -129,6 +133,7 @@ internal class DualVideoStateMachine(
     private fun startWatchdog() {
         if (watchdogRunning || released) return
         watchdogRunning = true
+        handler.removeCallbacks(watchdog)
         handler.postDelayed(watchdog, WATCHDOG_INTERVAL_MS)
     }
 
@@ -320,10 +325,18 @@ internal class DualVideoStateMachine(
         val other = 1 - failedSlot
         if (items[other] == null || deferred[other]) return false
         val staged = if (failedSlot == currentSlot) other else failedSlot
-        if (!singleDecoderMode) {
-            Log.w(TAG, "Second video decoder failed to open; trying hard cuts")
-            singleDecoderMode = true
-            trialPlaybackId = items[staged]?.playbackId
+        if (staged == failedSlot) {
+            // Only a staged clip failing to open next to a playing one says the device can't run
+            // two decoders. Its own cut will tell whether the device or the clip was at fault.
+            if (!singleDecoderMode) {
+                Log.w(TAG, "Second video decoder failed to open; trying hard cuts")
+                singleDecoderMode = true
+                trialPlaybackId = items[staged]?.playbackId
+            }
+        } else {
+            // The playing clip lost its decoder (reclaimed by another app, say). That proves
+            // nothing about running two, so park the staged clip for this one cut only.
+            Log.w(TAG, "Playing clip lost its decoder; next cut is a hard cut")
         }
         // Park the staged clip without a decoder; play() opens it at the cut. Its player is idle
         // after the error (or is stopped here), and keeps its media item for that later prepare().
