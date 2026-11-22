@@ -6,12 +6,9 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import io.github._514sid.gapless.GaplessVideoConfig
-import io.github._514sid.gapless.GaplessVideoStrategy
 import io.github._514sid.gapless.GaplessWebConfig
 import io.github._514sid.gapless.internal.image.ImageStateMachine
 import io.github._514sid.gapless.internal.video.DualVideoStateMachine
-import io.github._514sid.gapless.internal.video.VideoEngine
-import io.github._514sid.gapless.internal.video.VideoStateMachine
 import io.github._514sid.gapless.internal.web.WebStateMachine
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -31,8 +28,7 @@ internal enum class ActiveContent { NONE, VIDEO, IMAGE, WEB }
  * Routes [PlayerCommand]s to the per-media state machines.
  *
  * Commands are consumed from a single [Flow] on one coroutine, so prepare/play are processed
- * strictly in order and never overlap. The [VideoEngine] is chosen from
- * [GaplessVideoConfig.strategy] and lives for the whole lifetime; switching to image or web playback
+ * strictly in order and never overlap. The video engine lives for the whole lifetime; switching to image or web playback
  * clears its media so the decoder is released, but the engine is reused for the next video.
  */
 internal class PlayerOrchestrator(
@@ -43,10 +39,7 @@ internal class PlayerOrchestrator(
     webConfig: GaplessWebConfig = GaplessWebConfig(),
 ) {
 
-    val video: VideoEngine = when (videoConfig.strategy) {
-        GaplessVideoStrategy.DUAL_INSTANCE -> DualVideoStateMachine(context, videoConfig)
-        GaplessVideoStrategy.SINGLE_INSTANCE_EXPERIMENTAL -> VideoStateMachine(context, videoConfig)
-    }
+    val video = DualVideoStateMachine(context, videoConfig)
     val image = ImageStateMachine(context, scope)
     val web = WebStateMachine(context, scope, webConfig)
 
@@ -78,6 +71,12 @@ internal class PlayerOrchestrator(
     var onPreloadError: ((assetId: String, message: String) -> Unit)? = null
     var onPreloadMissed: ((assetId: String, elapsedMs: Long) -> Unit)? = null
 
+    /**
+     * An item is on screen and its timeline is running. startedAt is the wall-clock time its
+     * position was zero, or null for now.
+     */
+    var onShown: ((playbackId: UUID, startedAt: Long?) -> Unit)? = null
+
     init {
         video.onErrorCallback = { message -> onError?.invoke(message) }
         video.onPreloadErrorCallback = { assetId, message -> onPreloadError?.invoke(assetId, message) }
@@ -85,6 +84,9 @@ internal class PlayerOrchestrator(
         web.onPreloadError = { assetId, message -> onPreloadError?.invoke(assetId, message) }
         image.onError = { assetId, message -> onPreloadError?.invoke(assetId, message) }
         image.onPlaybackError = { message -> onError?.invoke(message) }
+        video.onStartedCallback = { playbackId, startedAt -> onShown?.invoke(playbackId, startedAt) }
+        image.onShown = { playbackId -> onShown?.invoke(playbackId, null) }
+        web.onShown = { playbackId -> onShown?.invoke(playbackId, null) }
 
         commandJob = scope.launch {
             commands.collect { command -> dispatch(command) }

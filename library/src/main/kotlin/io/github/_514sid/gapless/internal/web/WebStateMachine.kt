@@ -26,6 +26,7 @@ import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeout
+import java.util.UUID
 
 /**
  * A/B web slots. The WebViews are created on the first web asset, not up front: constructing one
@@ -68,6 +69,9 @@ internal class WebStateMachine(
 
     /** True while play() waits for the hidden slot to paint before swapping to it. */
     private var awaitingSwap = false
+
+    /** The page passed to [play] has been swapped in, painted (or after the paint timeout). */
+    var onShown: ((playbackId: UUID) -> Unit)? = null
 
     var pageCommitted: Boolean = false
         private set
@@ -168,6 +172,7 @@ internal class WebStateMachine(
             // slots before the swap applies, leaving a blank slot on screen.
             logDebug("play(): Already committed, swapping immediately to slot $target.")
             renderState = renderState.copy(activeSlot = target)
+            onShown?.invoke(item.playbackId)
             transitionJob = scope.launch {
                 delay(150)
                 if (renderState.activeSlot == target) {
@@ -204,6 +209,7 @@ internal class WebStateMachine(
             if (!swap) return@launch
 
             renderState = renderState.copy(activeSlot = target)
+            onShown?.invoke(item.playbackId)
 
             delay(150)
             if (renderState.activeSlot == target) {

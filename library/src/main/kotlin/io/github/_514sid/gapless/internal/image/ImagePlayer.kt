@@ -39,18 +39,21 @@ internal fun ImagePlayer(
     state: ImagePlayerState,
     modifier: Modifier = Modifier,
     onDisplayError: (ImageSlotState, String) -> Unit = { _, _ -> },
+    onDisplayed: (ImageSlotState) -> Unit = {},
 ) {
     Box(modifier = modifier) {
         ImageSlot(
             slot = state.slotA,
             isActive = state.activeSlot == 0 && state.slotA != null,
             onDisplayError = onDisplayError,
+            onDisplayed = onDisplayed,
         )
 
         ImageSlot(
             slot = state.slotB,
             isActive = state.activeSlot == 1 && state.slotB != null,
             onDisplayError = onDisplayError,
+            onDisplayed = onDisplayed,
         )
     }
 }
@@ -60,6 +63,7 @@ private fun ImageSlot(
     slot: ImageSlotState?,
     isActive: Boolean,
     onDisplayError: (ImageSlotState, String) -> Unit,
+    onDisplayed: (ImageSlotState) -> Unit,
 ) {
     Box(
         modifier = Modifier
@@ -75,6 +79,7 @@ private fun ImageSlot(
             contentDescription = null,
             contentScale = ContentScale.Fit,
             modifier = Modifier.fillMaxSize(),
+            onSuccess = { if (slot != null) onDisplayed(slot) },
             onError = { error ->
                 if (slot != null) {
                     val throwable = error.result.throwable

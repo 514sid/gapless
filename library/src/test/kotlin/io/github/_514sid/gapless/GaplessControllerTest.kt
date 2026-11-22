@@ -38,7 +38,7 @@ class GaplessControllerTest {
     private val readyTimeoutMs = 10_000L
 
     /** A controller wired to a fake player that records commands and events. */
-    private inner class Harness(scope: TestScope) {
+    private inner class Harness(scope: TestScope, val autoShow: Boolean = true) {
         val controller = GaplessController(scope.backgroundScope, preloadMs, readyTimeoutMs)
         val commands = mutableListOf<PlayerCommand>()
         val events = mutableListOf<GaplessEvent>()
@@ -46,7 +46,13 @@ class GaplessControllerTest {
 
         init {
             controller.isReadyProvider = { it in ready }
-            scope.backgroundScope.launch { controller.commands.collect { commands += it } }
+            scope.backgroundScope.launch {
+                controller.commands.collect {
+                    commands += it
+                    // Like a player whose content shows the moment it is played.
+                    if (autoShow && it is PlayerCommand.Play) controller.onShown(it.item.playbackId, null)
+                }
+            }
             scope.backgroundScope.launch { controller.events.collect { events += it } }
         }
 
@@ -253,6 +259,92 @@ class GaplessControllerTest {
 
         assertEquals("c", h.current?.id)
         assertFalse(h.eventsOf<GaplessEvent.Started>().any { it.asset.id == "b" })
+    }
+
+    // Started waits for the player to show the asset
+
+    /** Plays [first], reported shown, then plays [second] without reporting it. */
+    private fun TestScope.cutToUnshown(h: Harness, first: GaplessAsset, second: GaplessAsset) {
+        runCurrent()
+        h.controller.start(first)
+        advanceTimeBy(preloadMs + 1)
+        runCurrent()
+        h.controller.onShown(h.plays.last().playbackId, null)
+        runCurrent()
+        h.controller.prepareNext(second)
+        runCurrent()
+        h.controller.play(second)
+        runCurrent()
+    }
+
+    @Test
+    fun `Started and Ended wait until the player shows the new asset`() = runTest {
+        val h = Harness(this, autoShow = false)
+        val a = video("a")
+        val b = video("b")
+        cutToUnshown(h, a, b)
+
+        assertEquals(listOf("a"), h.eventsOf<GaplessEvent.Started>().map { it.asset.id })
+        assertTrue(h.eventsOf<GaplessEvent.Ended>().isEmpty())
+        assertEquals(a, h.current)
+
+        h.controller.onShown(h.plays.last().playbackId, 1_234L)
+        runCurrent()
+        assertEquals(listOf("a", "b"), h.eventsOf<GaplessEvent.Started>().map { it.asset.id })
+        assertEquals(listOf("a"), h.eventsOf<GaplessEvent.Ended>().map { it.asset.id })
+        assertEquals(1_234L, h.eventsOf<GaplessEvent.Started>().last().timestamp)
+        assertEquals(1_234L, h.controller.currentState.value?.startedAt)
+        assertEquals(b, h.current)
+    }
+
+    @Test
+    fun `Started is emitted anyway when the player never reports the asset shown`() = runTest {
+        val h = Harness(this, autoShow = false)
+        cutToUnshown(h, video("a"), video("b"))
+
+        advanceTimeBy(readyTimeoutMs - 1)
+        runCurrent()
+        assertEquals(1, h.eventsOf<GaplessEvent.Started>().size)
+
+        advanceTimeBy(2)
+        runCurrent()
+        assertEquals(listOf("a", "b"), h.eventsOf<GaplessEvent.Started>().map { it.asset.id })
+    }
+
+    @Test
+    fun `an asset cut away from before it showed gets neither Started nor Ended`() = runTest {
+        val h = Harness(this, autoShow = false)
+        cutToUnshown(h, video("a"), video("b"))
+        val skipped = h.plays.last().playbackId
+
+        h.controller.prepareNext(video("c"))
+        runCurrent()
+        h.controller.play(video("c"))
+        runCurrent()
+        h.controller.onShown(skipped, null)
+        runCurrent()
+        assertEquals(listOf("a"), h.eventsOf<GaplessEvent.Started>().map { it.asset.id })
+
+        h.controller.onShown(h.plays.last().playbackId, null)
+        runCurrent()
+        assertEquals(listOf("a", "c"), h.eventsOf<GaplessEvent.Started>().map { it.asset.id })
+        assertEquals(listOf("a"), h.eventsOf<GaplessEvent.Ended>().map { it.asset.id })
+    }
+
+    @Test
+    fun `a failure before the new asset shows ends the old one and reports the new one`() = runTest {
+        val h = Harness(this, autoShow = false)
+        cutToUnshown(h, video("a"), video("b"))
+
+        h.controller.onPlaybackError("decoder failed")
+        runCurrent()
+        assertEquals(listOf("a"), h.eventsOf<GaplessEvent.Ended>().map { it.asset.id })
+        assertEquals(listOf("b"), h.eventsOf<GaplessEvent.PlaybackError>().map { it.asset.id })
+        assertEquals(1, h.eventsOf<GaplessEvent.Started>().size)
+
+        // The timeout for the failed asset no longer fires.
+        settle()
+        assertEquals(1, h.eventsOf<GaplessEvent.Started>().size)
     }
 
     // Errors and shutdown

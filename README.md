@@ -58,8 +58,10 @@ class MainActivity : ComponentActivity() {
                     val current = assets.first { it.spec.id == event.asset.id }
                     val next = assets[index++ % assets.size]
                     manager.prepareNext(next.spec)
+                    // Started can arrive a little after the clip began; time from its timestamp.
+                    val elapsed = System.currentTimeMillis() - event.timestamp
                     timerJob = launch {
-                        delay(current.durationMs)
+                        delay(current.durationMs - elapsed)
                         manager.play(next.spec)
                     }
                 }
@@ -90,6 +92,8 @@ val manager = GaplessController(
 
 Call `start` with the first asset. On each `Started` event, call `prepareNext` to begin buffering the next asset and `play` when it is time to transition. The host controls all timing.
 
+`Started` fires once the asset is really on screen, and for a video once its frames are moving, which with audio on can be a few hundred milliseconds after the cut. Its `timestamp` is when the clip's position was zero, so time each slot from `event.timestamp` rather than from when the event arrives. `Ended` for the previous asset fires just before it.
+
 ```kotlin
 val durations = mapOf("promo-video" to 15_000L, "poster" to 8_000L)
 manager.start(firstAsset)
@@ -99,8 +103,9 @@ lifecycleScope.launch {
         if (event is GaplessEvent.Started) {
             val next = nextAsset()
             manager.prepareNext(next)
+            val elapsed = System.currentTimeMillis() - event.timestamp
             launch {
-                delay(durations[event.asset.id] ?: return@launch)
+                delay((durations[event.asset.id] ?: return@launch) - elapsed)
                 manager.play(next)
             }
         }
@@ -220,8 +225,8 @@ lifecycleScope.launch {
 }
 ```
 
-Every `play(asset)` ends in `Started` for that asset or in `PreloadError` for it, unless a later call
-supersedes it. A host whose schedule runs off `Started` must also move on after `PlaybackError` and after a
+Every `play(asset)` ends in `Started` for that asset, in `PreloadError` for it, or in `PlaybackError` if it
+fails after the cut but before it shows, unless a later call supersedes it. A host whose schedule runs off `Started` must also move on after `PlaybackError` and after a
 `PreloadError` for the asset it just asked to play, or the schedule stops there. The sample app's
 `PlayerActivity` shows the pattern.
 
@@ -239,13 +244,14 @@ Video failures are retried inside the player before you hear about them:
 - A live stream that falls behind its window jumps back to the live edge.
 - A clip that stops advancing for `stallTimeoutMs` (15 seconds by default) is restarted.
 - Each video player buffers at most `targetBufferBytes` (32 MB by default), whatever the buffer durations
-  allow. The default strategy runs two players, so video buffers take at most about twice that.
+  allow. There are two players, so video buffers take at most about twice that.
 - `enableDecoderFallback` is on by default, so a hardware decoder that won't open falls back to another
-  decoder, usually a software one.
-- With the default `DUAL_INSTANCE` strategy, muted clips (`volume = 0`) don't select an audio track at all, so they need no audio decoder and an audio
+  decoder, usually a software one. Turn it off to keep every clip on the hardware decoder: a second decoder
+  that won't open then means hard cuts (below) rather than software decoding, which can stutter on weak
+  CPUs.
+- Muted clips (`volume = 0`) don't select an audio track at all, so they need no audio decoder and an audio
   output failure can't stop them.
-- Some devices can't run two hardware decoders at once, which the default `DUAL_INSTANCE` strategy needs
-  for seamless cuts. When the second decoder fails to open, the player switches to hard cuts: the old clip
+- Some devices can't run two hardware decoders at once, which seamless cuts need. When the second decoder fails to open, the player switches to hard cuts: the old clip
   holds its last frame while the new one starts, instead of failing. If the new clip's decoder still won't
   open once the old one is released, the clip was the problem: it is reported and seamless cuts resume.
 
@@ -293,8 +299,9 @@ lifecycleScope.launch {
         if (event is GaplessEvent.Started) {
             val next = nextShuffled()
             manager.prepareNext(next.spec)
+            val elapsed = System.currentTimeMillis() - event.timestamp
             launch {
-                delay(durations[event.asset.id] ?: return@launch)
+                delay((durations[event.asset.id] ?: return@launch) - elapsed)
                 manager.play(next.spec)
             }
         }
@@ -398,7 +405,7 @@ Without this, service workers will fail to make network requests and the page wi
 
 Each media type uses a different strategy to eliminate the gap:
 
-**Video** uses ExoPlayer's native 2-item media queue. When the next video is due, it is added as item[1] while item[0] is still playing. On transition, ExoPlayer seeks to item[1] and drops item[0]. The switch happens inside a single player instance with no surface swap. If the aspect ratio changes between clips, a bitmap snapshot of the last frame is captured and held on screen until the first frame of the next video renders, hiding any resize flicker.
+**Video** uses two ExoPlayers, each drawing to its own `TextureView`. While one plays, the other loads the next clip and waits, paused, on its first frame, already sized to the clip's shape. The cut swaps which view is visible in one UI frame and clears the old player, so nothing is copied or resized on screen. On a device that can't open a second decoder, the player switches to hard cuts: the outgoing clip's last frame stays up while the next clip's decoder opens.
 
 **Images** maintain two Coil slots (A and B) in the Compose hierarchy at all times. While one slot is visible, the other enqueues the next image with Coil in the background. On transition, the active slot index flips. Both slots stay composed so Coil keeps the decoded bitmap warm.
 

@@ -21,6 +21,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import io.github._514sid.gapless.internal.PlaybackItem
 import kotlinx.coroutines.launch
+import java.util.UUID
+
 
 @MainThread
 internal class ImageStateMachine(
@@ -139,6 +141,33 @@ internal class ImageStateMachine(
      * A slot's own decode failed (out of memory, say) after its preload succeeded. Without this the
      * slot just shows black and nobody hears about it.
      */
+    /** The image passed to [play] is decoded and on screen. */
+    var onShown: ((playbackId: UUID) -> Unit)? = null
+
+    /** The image passed to [play] that hasn't been reported shown yet. */
+    private var awaitingShown: UUID? = null
+
+    /** The item each slot last finished decoding, so a cut to a decoded slot reports at once. */
+    private val decoded = arrayOfNulls<UUID>(2)
+
+    /** A slot finished decoding its image. Hidden slots decode too, while staged. */
+    fun onDisplayed(slot: ImageSlotState) {
+        val playbackId = slot.playbackId ?: return
+        val index = when (playbackId) {
+            renderState.slotA?.playbackId -> 0
+            renderState.slotB?.playbackId -> 1
+            else -> return
+        }
+        decoded[index] = playbackId
+        if (index == renderState.activeSlot) reportShown(playbackId)
+    }
+
+    private fun reportShown(playbackId: UUID) {
+        if (playbackId != awaitingShown) return
+        awaitingShown = null
+        onShown?.invoke(playbackId)
+    }
+
     fun onDisplayError(slot: ImageSlotState, message: String) {
         val playbackId = slot.playbackId ?: return
         val active = if (renderState.activeSlot == 0) renderState.slotA else renderState.slotB
@@ -177,9 +206,13 @@ internal class ImageStateMachine(
 
         renderState = renderState.copy(activeSlot = target)
         pendingItem = null
+        awaitingShown = item.playbackId
+        if (decoded[target] == item.playbackId) reportShown(item.playbackId)
     }
 
     fun clear() {
+        awaitingShown = null
+        decoded.fill(null)
         prepareJob?.cancel()
         prepareJob = null
         prepareFailed = false
