@@ -136,6 +136,7 @@ GaplessPlayer(
         maxBufferMs                         = 8_000,
         bufferForPlaybackMs                 = 1_000,
         bufferForPlaybackAfterRebufferMs    = 2_000,
+        targetBufferBytes                   = 64 * 1024 * 1024,
     ),
     webConfig    = GaplessWebConfig(           // optional; shown with non-default values
         enableChromeDebugging  = true,         // enable for development builds
@@ -237,6 +238,8 @@ Video failures are retried inside the player before you hear about them:
   it is reported.
 - A live stream that falls behind its window jumps back to the live edge.
 - A clip that stops advancing for `stallTimeoutMs` (15 seconds by default) is restarted.
+- Each video player buffers at most `targetBufferBytes` (32 MB by default), whatever the buffer durations
+  allow. The default strategy runs two players, so video buffers take at most about twice that.
 - `enableDecoderFallback` is on by default, so a hardware decoder that won't open falls back to another
   decoder, usually a software one.
 - With the default `DUAL_INSTANCE` strategy, muted clips (`volume = 0`) don't select an audio track at all, so they need no audio decoder and an audio
@@ -250,7 +253,8 @@ What still reaches you:
 
 - `PlaybackError` when retries run out or the video can't play on this device at all, including video in a
   format no decoder on the device handles (which ExoPlayer would otherwise play with no picture and no
-  error). A failed video stays frozen on its last frame.
+  error). A failed video stays frozen on its last frame. An image that decoded during preload but fails to
+  decode on screen (out of memory, for example) also ends in `PlaybackError`, instead of a silent black screen.
 - `PreloadError` for an asset that failed to load. For web assets this includes a device with no usable
   WebView, and a WebView whose renderer process crashed; the library replaces the crashed WebView instead
   of letting Android kill the app.

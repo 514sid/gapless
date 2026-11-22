@@ -58,29 +58,34 @@ public fun GaplessPlayer(
         }
     }
 
-    Box(
-        modifier = modifier.onSizeChanged { size ->
-            orchestrator.updateContainerSize(size.width, size.height)
-        }
-    ) {
+    Box(modifier = modifier) {
         RotatedContainer(rotation = rotation.degrees) {
-            val active = orchestrator.activeContent
-
-            orchestrator.video.Content(modifier = Modifier.fillMaxSize())
-
-            ImagePlayer(
-                state = orchestrator.image.renderState,
+            // Measured inside the rotation, so a 90 or 270 degree player reports the swapped size
+            // that images are actually laid out at, and preloads decode at that size.
+            Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .graphicsLayer { alpha = if (active == ActiveContent.IMAGE) 1f else 0f }
-            )
+                    .onSizeChanged { size -> orchestrator.updateContainerSize(size.width, size.height) }
+            ) {
+                val active = orchestrator.activeContent
 
-            WebPlayer(
-                state = orchestrator.web.renderState,
-                modifier = Modifier
-                    .fillMaxSize()
-                    .graphicsLayer { alpha = if (active == ActiveContent.WEB) 1f else 0f }
-            )
+                orchestrator.video.Content(modifier = Modifier.fillMaxSize())
+
+                ImagePlayer(
+                    state = orchestrator.image.renderState,
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .graphicsLayer { alpha = if (active == ActiveContent.IMAGE) 1f else 0f },
+                    onDisplayError = orchestrator.image::onDisplayError,
+                )
+
+                WebPlayer(
+                    state = orchestrator.web.renderState,
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .graphicsLayer { alpha = if (active == ActiveContent.WEB) 1f else 0f }
+                )
+            }
         }
     }
 }

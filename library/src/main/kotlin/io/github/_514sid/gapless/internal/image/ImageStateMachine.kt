@@ -9,6 +9,12 @@ import coil3.imageLoader
 import coil3.request.ErrorResult
 import coil3.request.ImageRequest
 import coil3.request.allowHardware
+import coil3.size.Precision
+import kotlin.coroutines.ContinuationInterceptor
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -25,6 +31,8 @@ internal class ImageStateMachine(
             ImageRequest.Builder(context)
                 .data(model)
                 .size(w, h)
+                // Same as AsyncImage with ContentScale.Fit, so its request is a cache hit.
+                .precision(Precision.INEXACT)
                 .allowHardware(true)
                 .build()
         )
@@ -35,6 +43,9 @@ internal class ImageStateMachine(
         const val UHD_LONG_SIDE = 3840
         const val UHD_SHORT_SIDE = 2160
 
+        /** How long a preload waits for the first layout before decoding at the 4K cap. */
+        const val MEASURE_WAIT_MS = 1_000L
+
         /** One decode at a time; a new prepare cancels the previous load anyway. */
         val loadDispatcher = Dispatchers.IO.limitedParallelism(1)
     }
@@ -42,10 +53,26 @@ internal class ImageStateMachine(
     var renderState by mutableStateOf(ImagePlayerState())
         private set
 
+    /** A staged image failed to load. */
     var onError: ((assetId: String, message: String) -> Unit)? = null
 
-    var containerWidth: Int = 0
-    var containerHeight: Int = 0
+    /** The image on screen failed to display. */
+    var onPlaybackError: ((message: String) -> Unit)? = null
+
+    /** The size images are shown at: the player's size after rotation. */
+    private val containerSize = MutableStateFlow(0 to 0)
+
+    var containerWidth: Int
+        get() = containerSize.value.first
+        set(value) { containerSize.value = value to containerSize.value.second }
+
+    var containerHeight: Int
+        get() = containerSize.value.second
+        set(value) { containerSize.value = containerSize.value.first to value }
+
+    fun updateContainerSize(width: Int, height: Int) {
+        containerSize.value = width to height
+    }
 
     private var prepareJob: Job? = null
     private var pendingItem: PlaybackItem.Image? = null
@@ -65,19 +92,21 @@ internal class ImageStateMachine(
 
         renderState = renderState.setSlot(
             slot = inactiveSlot,
-            value = ImageSlotState(item.model)
+            value = ImageSlotState(item.model, item.playbackId, loaded = false)
         )
 
-        val isPortrait = containerHeight > containerWidth
-        val maxW = if (isPortrait) UHD_SHORT_SIDE else UHD_LONG_SIDE
-        val maxH = if (isPortrait) UHD_LONG_SIDE else UHD_SHORT_SIDE
-
-        val targetW = if (containerWidth > 0) containerWidth.coerceAtMost(maxW) else maxW
-        val targetH = if (containerHeight > 0) containerHeight.coerceAtMost(maxH) else maxH
-
+        val owner = scope.coroutineContext[ContinuationInterceptor] ?: Dispatchers.Main
         prepareJob = scope.launch(loadDispatcher) {
             try {
+                // Decoding before the first layout would use the 4K cap, then decode again at the
+                // real size once shown. Give layout a moment first.
+                val (width, height) = withTimeoutOrNull(MEASURE_WAIT_MS) {
+                    containerSize.first { (w, h) -> w > 0 && h > 0 }
+                } ?: containerSize.value
+                val (targetW, targetH) = targetSize(width, height)
                 loadImage(item.model, targetW, targetH)
+                // Decoded and cached: now let the slot show it.
+                withContext(owner) { markLoaded(item) }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
@@ -85,6 +114,40 @@ internal class ImageStateMachine(
             } catch (e: OutOfMemoryError) {
                 // An oversized image must not take the app down with it.
                 fail(item, e)
+            }
+        }
+    }
+
+    private fun markLoaded(item: PlaybackItem.Image) {
+        val slot = inactiveSlot
+        val state = if (slot == 0) renderState.slotA else renderState.slotB
+        if (state?.playbackId == item.playbackId && !state.loaded) {
+            renderState = renderState.setSlot(slot, state.copy(loaded = true))
+        }
+    }
+
+    private fun targetSize(width: Int, height: Int): Pair<Int, Int> {
+        val isPortrait = height > width
+        val maxW = if (isPortrait) UHD_SHORT_SIDE else UHD_LONG_SIDE
+        val maxH = if (isPortrait) UHD_LONG_SIDE else UHD_SHORT_SIDE
+        val targetW = if (width > 0) width.coerceAtMost(maxW) else maxW
+        val targetH = if (height > 0) height.coerceAtMost(maxH) else maxH
+        return targetW to targetH
+    }
+
+    /**
+     * A slot's own decode failed (out of memory, say) after its preload succeeded. Without this the
+     * slot just shows black and nobody hears about it.
+     */
+    fun onDisplayError(slot: ImageSlotState, message: String) {
+        val playbackId = slot.playbackId ?: return
+        val active = if (renderState.activeSlot == 0) renderState.slotA else renderState.slotB
+        val pending = pendingItem
+        when {
+            active?.playbackId == playbackId -> onPlaybackError?.invoke("Image failed to display: $message")
+            pending?.playbackId == playbackId && !prepareFailed -> {
+                prepareJob?.cancel()
+                fail(pending, IllegalStateException(message))
             }
         }
     }
@@ -101,11 +164,15 @@ internal class ImageStateMachine(
 
         val target = inactiveSlot
 
-        if (pendingItem?.playbackId != item.playbackId) {
+        val staged = if (target == 0) renderState.slotA else renderState.slotB
+        if (staged?.playbackId != item.playbackId) {
             renderState = renderState.setSlot(
                 slot = target,
-                value = ImageSlotState(item.model)
+                value = ImageSlotState(item.model, item.playbackId)
             )
+        } else if (!staged.loaded) {
+            // Cut before the preload finished: the slot loads it itself now.
+            renderState = renderState.setSlot(target, staged.copy(loaded = true))
         }
 
         renderState = renderState.copy(activeSlot = target)

@@ -306,4 +306,93 @@ class ImageStateMachineTest {
 
         assertTrue(cancellationDeferred.await())
     }
+
+    // Holding a staged image back until its preload has decoded it
+
+    @Test
+    fun `a staged image is held back until its preload finishes`() = runTest {
+        val release = CompletableDeferred<Unit>()
+        machine = ImageStateMachine(
+            context = mockk(relaxed = true),
+            scope = this,
+            loadImage = { _, _, _ -> release.await() },
+        )
+        machine.updateContainerSize(1920, 1080)
+        machine.prepare(imageItem("photo.jpg"))
+        assertFalse(machine.renderState.slotB!!.loaded)
+
+        release.complete(Unit)
+        // The load runs on a real IO thread and hands back to the test dispatcher to mark the slot.
+        val deadline = System.currentTimeMillis() + 5_000
+        while (!machine.renderState.slotB!!.loaded && System.currentTimeMillis() < deadline) {
+            testScheduler.advanceUntilIdle()
+            Thread.sleep(5)
+        }
+        assertTrue(machine.renderState.slotB!!.loaded)
+        assertTrue(machine.isPrepareComplete)
+    }
+
+    @Test
+    fun `a cut before the preload finishes lets the slot load the image itself`() {
+        val item = imageItem("photo.jpg")
+        machine.prepare(item)
+        assertFalse(machine.renderState.slotB!!.loaded)
+
+        machine.play(item)
+        assertTrue(machine.renderState.slotB!!.loaded)
+    }
+
+    @Test
+    fun `a preload waits for the first layout and decodes at that size`() = runTest {
+        val size = CompletableDeferred<Pair<Int, Int>>()
+        machine = ImageStateMachine(
+            context = mockk(relaxed = true),
+            scope = this,
+            loadImage = { _, w, h -> size.complete(w to h) },
+        )
+        machine.prepare(imageItem("photo.jpg"))
+        machine.updateContainerSize(1080, 1920)
+
+        assertEquals(1080 to 1920, size.await())
+    }
+
+    // Failures of the slot's own decode
+
+    @Test
+    fun `a decode failure on the image on screen is a playback error`() {
+        val messages = mutableListOf<String>()
+        machine.onPlaybackError = { messages += it }
+        val item = imageItem("photo.jpg")
+        machine.play(item)
+
+        machine.onDisplayError(machine.renderState.slotB!!, "out of memory")
+        assertEquals(1, messages.size)
+    }
+
+    @Test
+    fun `a decode failure on a staged image fails its preload once`() {
+        val failed = mutableListOf<String>()
+        machine.onError = { assetId, _ -> failed += assetId }
+        val item = imageItem("photo.jpg").apply { assetId = "poster" }
+        machine.prepare(item)
+        val slot = machine.renderState.slotB!!
+
+        machine.onDisplayError(slot, "out of memory")
+        machine.onDisplayError(slot, "out of memory")
+        assertEquals(listOf("poster"), failed)
+        assertFalse(machine.isPrepareComplete)
+    }
+
+    @Test
+    fun `a decode failure on a slot no longer in use is ignored`() {
+        val reported = mutableListOf<String>()
+        machine.onError = { _, message -> reported += message }
+        machine.onPlaybackError = { reported += it }
+        machine.play(imageItem("first.jpg"))
+        val old = machine.renderState.slotB!!
+        machine.play(imageItem("second.jpg"))
+
+        machine.onDisplayError(old, "late failure")
+        assertTrue(reported.isEmpty())
+    }
 }
