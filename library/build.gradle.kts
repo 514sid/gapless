@@ -6,8 +6,10 @@ plugins {
 }
 
 android {
-    namespace = "io.github._514sid.gapless"
-    testNamespace = "io.github.gapless.test"
+    // Must be a valid Android package name (no segment may start with "_"), or AAPT rejects the
+    // release manifest. It only names the generated manifest package: the library has no
+    // resources, and the Kotlin sources keep the io.github._514sid.gapless package.
+    namespace = "io.github.gapless514sid"
     compileSdk = libs.versions.compileSdk.get().toInt()
 
     defaultConfig {
@@ -66,27 +68,6 @@ dependencies {
 
 tasks.withType<Test> {
     useJUnitPlatform()
-}
-
-// AGP 9 does not honor testNamespace for library modules, so the test manifest gets
-// the invalid package "io.github._514sid.gapless.test" (underscore-led segment).
-// Patch it after the manifest merge task runs.
-tasks.configureEach {
-    if (name == "processDebugAndroidTestManifest") {
-        doLast {
-            val manifest = layout.buildDirectory.file(
-                "intermediates/packaged_manifests/debugAndroidTest/processDebugAndroidTestManifest/AndroidManifest.xml"
-            ).get().asFile
-            if (manifest.exists()) {
-                manifest.writeText(
-                    manifest.readText().replace(
-                        "io.github._514sid.gapless",
-                        "io.github.gapless514sid"
-                    )
-                )
-            }
-        }
-    }
 }
 
 afterEvaluate {
