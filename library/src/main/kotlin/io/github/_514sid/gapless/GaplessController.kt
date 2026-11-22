@@ -122,6 +122,9 @@ public class GaplessController(
      * Cuts to [asset]. If it was staged with [prepareNext] the cut is immediate; otherwise it is
      * prepared first and shown once ready, or after [readyTimeoutMs].
      *
+     * Unless a later call supersedes it, this ends in [GaplessEvent.Started] for [asset], or in
+     * [GaplessEvent.PreloadError] if it fails to load, in which case nothing changes on screen.
+     *
      * @throws IllegalArgumentException if [asset] fails validation (blank id or uri, unsupported
      * mimeType, volume outside 0..1, non-positive durationMs or refreshIntervalMs).
      */

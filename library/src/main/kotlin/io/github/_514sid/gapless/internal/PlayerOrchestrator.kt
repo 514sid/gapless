@@ -1,6 +1,7 @@
 package io.github._514sid.gapless.internal
 
 import android.content.Context
+import android.util.Log
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -12,6 +13,7 @@ import io.github._514sid.gapless.internal.video.DualVideoStateMachine
 import io.github._514sid.gapless.internal.video.VideoEngine
 import io.github._514sid.gapless.internal.video.VideoStateMachine
 import io.github._514sid.gapless.internal.web.WebStateMachine
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.Flow
@@ -84,12 +86,39 @@ internal class PlayerOrchestrator(
         image.onError = { assetId, message -> onPreloadError?.invoke(assetId, message) }
 
         commandJob = scope.launch {
-            commands.collect { command ->
-                when (command) {
-                    is PlayerCommand.Prepare -> prepare(command.item)
-                    is PlayerCommand.Play    -> play(command.item)
-                }
+            commands.collect { command -> dispatch(command) }
+        }
+    }
+
+    /**
+     * Runs one command. A failure here would otherwise escape into the composition's scope and
+     * crash the app, or end the collector and leave the player deaf to every later command, so it
+     * is reported as an error for the item instead.
+     */
+    private fun dispatch(command: PlayerCommand) {
+        try {
+            when (command) {
+                is PlayerCommand.Prepare -> prepare(command.item)
+                is PlayerCommand.Play    -> play(command.item)
             }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            reportFailure(command, e)
+        } catch (e: OutOfMemoryError) {
+            reportFailure(command, e)
+        }
+    }
+
+    private fun reportFailure(command: PlayerCommand, error: Throwable) {
+        val message = "Player failed: ${error.message ?: error.javaClass.simpleName}"
+        Log.e(TAG, message, error)
+        when (command) {
+            is PlayerCommand.Prepare -> {
+                if (preparedPlaybackId == command.item.playbackId) preparedPlaybackId = null
+                onPreloadError?.invoke(command.item.assetId, message)
+            }
+            is PlayerCommand.Play -> onError?.invoke(message)
         }
     }
 
@@ -169,5 +198,9 @@ internal class PlayerOrchestrator(
         video.release()
         web.release()
         image.clear()
+    }
+
+    private companion object {
+        const val TAG = "GaplessPlayer"
     }
 }

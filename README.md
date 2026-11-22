@@ -130,7 +130,8 @@ GaplessPlayer(
     controller   = manager,
     rotation     = GaplessRotation.Deg90,
     videoConfig  = GaplessVideoConfig(         // optional; shown with non-default values
-        enableDecoderFallback               = true,
+        enableDecoderFallback               = false,
+        stallTimeoutMs                      = 30_000,
         minBufferMs                         = 2_000,
         maxBufferMs                         = 8_000,
         bufferForPlaybackMs                 = 1_000,
@@ -211,13 +212,47 @@ lifecycleScope.launch {
             is GaplessEvent.Ended         -> log("Finished: ${event.asset.id}")
             is GaplessEvent.Preloading    -> log("Buffering next: ${event.asset.id}")
             is GaplessEvent.PlaybackError -> log("Error on ${event.asset.id}: ${event.message}")
+            is GaplessEvent.PreloadError  -> log("Could not load ${event.asset.id}: ${event.message}")
             is GaplessEvent.PreloadMissed -> log("Preload not ready for ${event.asset.id}: took ${event.elapsedMs}ms")
         }
     }
 }
 ```
 
-`PlaybackError` stops the loop — the host decides whether to call `start()` again, retry, or stay blank.
+Every `play(asset)` ends in `Started` for that asset or in `PreloadError` for it, unless a later call
+supersedes it. A host whose schedule runs off `Started` must also move on after `PlaybackError` and after a
+`PreloadError` for the asset it just asked to play, or the schedule stops there. The sample app's
+`PlayerActivity` shows the pattern.
+
+### Failure handling
+
+The library is built so that a bad asset or a flaky device costs one asset, not the app.
+
+Video failures are retried inside the player before you hear about them:
+
+- Network errors, decoders that fail to open or are reclaimed, and audio output errors are retried up to
+  three times with a growing delay. The last retry rebuilds that slot's ExoPlayer.
+- A live stream that falls behind its window jumps back to the live edge.
+- A clip that stops advancing for `stallTimeoutMs` (15 seconds by default) is restarted.
+- `enableDecoderFallback` is on by default, so a hardware decoder that won't open falls back to another
+  decoder, usually a software one.
+- Muted clips (`volume = 0`) don't select an audio track at all, so they need no audio decoder and an audio
+  output failure can't stop them.
+- Some devices can't run two hardware decoders at once, which the default `DUAL_INSTANCE` strategy needs
+  for seamless cuts. When the second decoder fails to open, the player switches to hard cuts for the rest of
+  the session: the old clip holds its last frame while the new one starts, instead of failing.
+
+What still reaches you:
+
+- `PlaybackError` when retries run out or the video can't play on this device at all, including video in a
+  format no decoder on the device handles (which ExoPlayer would otherwise play with no picture and no
+  error). A failed video stays frozen on its last frame.
+- `PreloadError` for an asset that failed to load. For web assets this includes a device with no usable
+  WebView, and a WebView whose renderer process crashed; the library replaces the crashed WebView instead
+  of letting Android kill the app.
+
+Native crashes inside a vendor codec, and ANRs, can't be caught in-process. Run the player in its own
+process with a watchdog, as the sample app does, if that matters for your deployment.
 
 ---
 

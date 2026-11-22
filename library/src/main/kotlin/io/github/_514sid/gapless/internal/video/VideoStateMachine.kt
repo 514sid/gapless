@@ -1,6 +1,7 @@
 package io.github._514sid.gapless.internal.video
 
 import android.content.Context
+import android.graphics.Bitmap
 import android.view.TextureView
 import androidx.annotation.OptIn
 import androidx.compose.runtime.Composable
@@ -11,6 +12,7 @@ import androidx.compose.ui.Modifier
 import androidx.media3.common.C
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
+import androidx.media3.common.Tracks
 import androidx.media3.common.VideoSize
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.DefaultLoadControl
@@ -54,13 +56,10 @@ internal class VideoStateMachine(context: Context, config: GaplessVideoConfig = 
                     }
                 }
                 override fun onPlayerError(error: PlaybackException) {
-                    val msg = error.message ?: error.toString()
-                    if (!isPlaying) {
-                        onPreloadErrorCallback?.invoke(pendingItem?.assetId ?: "", msg)
-                    } else {
-                        onErrorCallback?.invoke(msg)
-                    }
-                    handleErrorState()
+                    fail(error.message ?: error.errorCodeName)
+                }
+                override fun onTracksChanged(tracks: Tracks) {
+                    tracks.unsupportedVideoMessage()?.let { fail(it) }
                 }
             })
         }
@@ -107,9 +106,13 @@ internal class VideoStateMachine(context: Context, config: GaplessVideoConfig = 
             while (exoPlayer.mediaItemCount > nextIndex) {
                 exoPlayer.removeMediaItem(exoPlayer.mediaItemCount - 1)
             }
+            // Track selection is player-wide, so only turn audio on here: turning it off would
+            // also mute the clip still playing.
+            if (item.volume > 0f) exoPlayer.setAudioEnabled(true)
             exoPlayer.addMediaItem(buildMediaItem(item))
         } else {
             renderState = renderState.copy(aspectRatio = item.aspectRatioHint)
+            exoPlayer.setAudioEnabled(item.volume > 0f)
             exoPlayer.setMediaItem(buildMediaItem(item))
             exoPlayer.playWhenReady = false
             exoPlayer.prepare()
@@ -123,7 +126,7 @@ internal class VideoStateMachine(context: Context, config: GaplessVideoConfig = 
                 // snapshot whenever it may differ from what is on screen.
                 val hint = item.aspectRatioHint
                 if (hint == null || renderState.aspectRatio != hint) {
-                    renderState = renderState.copy(snapshot = textureViewRef?.bitmap)
+                    renderState = renderState.copy(snapshot = captureFrame())
                 }
                 if (hint != null) renderState = renderState.copy(aspectRatio = hint)
                 exoPlayer.volume = item.volume
@@ -149,6 +152,7 @@ internal class VideoStateMachine(context: Context, config: GaplessVideoConfig = 
             pausedAtEnd = false
             renderState = renderState.copy(aspectRatio = item.aspectRatioHint)
             exoPlayer.volume = item.volume
+            exoPlayer.setAudioEnabled(item.volume > 0f)
             exoPlayer.setMediaItem(buildMediaItem(item))
             exoPlayer.prepare()
             exoPlayer.play()
@@ -160,9 +164,32 @@ internal class VideoStateMachine(context: Context, config: GaplessVideoConfig = 
         renderState = renderState.copy(snapshot = null)
     }
 
-    private fun handleErrorState() {
-        pendingItem = null
-        renderState = renderState.copy(snapshot = null)
+    /**
+     * Reports an error and resets the engine. The player is left idle after an error, so carrying
+     * on in the "playing" state would queue later clips onto a player that never starts again.
+     */
+    private fun fail(message: String) {
+        val wasPlaying = isPlaying
+        val assetId = pendingItem?.assetId
+        clear()
+        if (wasPlaying) {
+            onErrorCallback?.invoke(message)
+        } else if (assetId != null) {
+            onPreloadErrorCallback?.invoke(assetId, message)
+        }
+    }
+
+    /** A copy of the frame on screen to cover the cut, or null if there's no memory for one. */
+    private fun captureFrame(): Bitmap? = try {
+        textureViewRef?.bitmap
+    } catch (_: OutOfMemoryError) {
+        null
+    }
+
+    private fun ExoPlayer.setAudioEnabled(enabled: Boolean) {
+        trackSelectionParameters = trackSelectionParameters.buildUpon()
+            .setTrackTypeDisabled(C.TRACK_TYPE_AUDIO, !enabled)
+            .build()
     }
 
     override fun clear() {

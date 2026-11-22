@@ -14,9 +14,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.ui.Modifier
-import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
-import androidx.lifecycle.repeatOnLifecycle
 import io.github._514sid.gapless.GaplessAsset
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -30,6 +28,7 @@ import kotlinx.coroutines.launch
 class PlayerActivity : ComponentActivity() {
     companion object {
         private const val TAG = "GaplessPlayer"
+        private const val SKIP_DELAY_MS = 1_000L
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -76,40 +75,67 @@ class PlayerActivity : ComponentActivity() {
         val durations = assets.associate { (asset, duration) -> asset.id to duration }
         var index = 0
         var timerJob: Job? = null
+        // The asset handed to start() or play() that hasn't reported Started yet.
+        var awaiting: GaplessAsset? = null
 
         val manager = GaplessController(scope = lifecycleScope, preloadMs = 3_000)
 
-        if (assets.isNotEmpty()) {
-            manager.start(assets[index++].first)
+        fun nextAsset(): GaplessAsset = assets[index++ % assets.size].first
+
+        fun playNext() {
+            val next = nextAsset()
+            awaiting = next
+            manager.play(next)
         }
 
+        // Moves past a failed asset. The pause keeps a playlist where everything fails from spinning.
+        fun skipAhead() {
+            timerJob?.cancel()
+            timerJob = lifecycleScope.launch {
+                delay(SKIP_DELAY_MS)
+                playNext()
+            }
+        }
+
+        if (assets.isNotEmpty()) {
+            val first = nextAsset()
+            awaiting = first
+            manager.start(first)
+        }
+
+        // Collected for the activity's whole life, not just while started: the schedule is driven
+        // by these events, and missing a Started while stopped would end it.
         lifecycleScope.launch {
-            repeatOnLifecycle(Lifecycle.State.STARTED) {
-                manager.events.collect { event ->
-                    when (event) {
-                        is GaplessEvent.Started -> {
-                            Log.d(TAG, "Started: ${event.asset.id} [${event.playbackId}]")
-                            if (assets.isNotEmpty()) {
-                                timerJob?.cancel()
-                                val next = assets[index++ % assets.size].first
-                                manager.prepareNext(next)
-                                timerJob = launch {
-                                    delay(durations[event.asset.id] ?: return@launch)
-                                    manager.play(next)
-                                }
-                            }
+            manager.events.collect { event ->
+                when (event) {
+                    is GaplessEvent.Started -> {
+                        Log.d(TAG, "Started: ${event.asset.id} [${event.playbackId}]")
+                        awaiting = null
+                        timerJob?.cancel()
+                        val next = assets[index % assets.size].first
+                        manager.prepareNext(next)
+                        timerJob = lifecycleScope.launch {
+                            delay(durations[event.asset.id] ?: return@launch)
+                            playNext()
                         }
-                        is GaplessEvent.Ended ->
-                            Log.d(TAG, "Ended: ${event.asset.id} [${event.playbackId}]")
-                        is GaplessEvent.PlaybackError ->
-                            Log.e(TAG, "Error on ${event.asset.id}: ${event.message}")
-                        is GaplessEvent.PreloadError ->
-                            Log.e(TAG, "PreloadError on ${event.asset.id}: ${event.message}")
-                        is GaplessEvent.Preloading ->
-                            Log.d(TAG, "Preloading: ${event.asset.id}")
-                        is GaplessEvent.PreloadMissed ->
-                            Log.w(TAG, "PreloadMissed: ${event.asset.id} took ${event.elapsedMs}ms")
                     }
+                    is GaplessEvent.Ended ->
+                        Log.d(TAG, "Ended: ${event.asset.id} [${event.playbackId}]")
+                    is GaplessEvent.PlaybackError -> {
+                        // The player already retried; this asset is done. Show the next one.
+                        Log.e(TAG, "Error on ${event.asset.id}: ${event.message}")
+                        skipAhead()
+                    }
+                    is GaplessEvent.PreloadError -> {
+                        Log.e(TAG, "PreloadError on ${event.asset.id}: ${event.message}")
+                        // If the cut we asked for failed, nothing else will move the schedule on.
+                        // A failed staged asset needs nothing: play() loads it again on its turn.
+                        if (event.asset.id == awaiting?.id) skipAhead()
+                    }
+                    is GaplessEvent.Preloading ->
+                        Log.d(TAG, "Preloading: ${event.asset.id}")
+                    is GaplessEvent.PreloadMissed ->
+                        Log.w(TAG, "PreloadMissed: ${event.asset.id} took ${event.elapsedMs}ms")
                 }
             }
         }
