@@ -43,6 +43,9 @@ kotlin {
     explicitApi()
 }
 
+/** The Android runtime jar Robolectric runs on, resolved by Gradle. See the test task below. */
+val robolectricRuntime: Configuration by configurations.creating
+
 dependencies {
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.compose.ui)
@@ -69,10 +72,22 @@ dependencies {
 
     androidTestImplementation(libs.androidx.test.runner)
     androidTestImplementation(libs.androidx.test.ext.junit)
+
+    robolectricRuntime(libs.robolectric.android.all) { isTransitive = false }
 }
 
 tasks.withType<Test> {
     useJUnitPlatform()
+    // Robolectric would otherwise download this jar itself while the tests run, and a failed
+    // download fails the whole test class. Gradle fetches it with retries and caches it instead.
+    val runtime = robolectricRuntime
+    inputs.files(runtime)
+    jvmArgumentProviders += CommandLineArgumentProvider {
+        listOf(
+            "-Drobolectric.offline=true",
+            "-Drobolectric.dependency.dir=${runtime.singleFile.parentFile.absolutePath}",
+        )
+    }
 }
 
 afterEvaluate {
