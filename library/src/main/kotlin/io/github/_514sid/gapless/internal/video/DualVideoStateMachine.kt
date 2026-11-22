@@ -23,6 +23,7 @@ import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
 import io.github._514sid.gapless.GaplessVideoConfig
 import io.github._514sid.gapless.internal.PlaybackItem
+import java.util.UUID
 
 /**
  * A/B video engine backed by two [ExoPlayer]s, one per slot. The next clip is staged and rendered
@@ -35,8 +36,10 @@ import io.github._514sid.gapless.internal.PlaybackItem
  * - A live stream that fell behind its window rejoins the live edge.
  * - Video with no decoder on the device is reported at once instead of playing with no picture.
  * - Some devices can't open a second hardware decoder while one is in use. When that happens the
- *   engine switches to hard cuts for good: the incoming clip opens its decoder only after the
- *   outgoing one releases it, and the outgoing clip's last frame stays up until the new one draws.
+ *   engine switches to hard cuts: the incoming clip opens its decoder only after the outgoing one
+ *   releases it, and the outgoing clip's last frame stays up until the new one draws. The switch is
+ *   provisional until the parked clip draws at its cut; if its decoder still fails with the other
+ *   slot empty, the clip was at fault, so it is reported and seamless cuts resume.
  * - A playing clip that stops advancing for [GaplessVideoConfig.stallTimeoutMs] is restarted.
  */
 @OptIn(UnstableApi::class)
@@ -91,6 +94,15 @@ internal class DualVideoStateMachine(
     /** Set once the device fails to run two decoders at once; from then on cuts are hard cuts. */
     private var singleDecoderMode = false
 
+    /**
+     * The parked clip whose decoder error turned on [singleDecoderMode]. The switch stays
+     * provisional until this clip draws at its cut; null once it has, or when no switch is on trial.
+     */
+    private var trialPlaybackId: UUID? = null
+
+    /** Whether the incoming clip of the current hard cut has had its quick decoder retry. */
+    private var cutRetryUsed = false
+
     private var released = false
 
     // Stall watchdog state for the current slot.
@@ -99,9 +111,12 @@ internal class DualVideoStateMachine(
     private var lastPosition = C.TIME_UNSET
     private var lastProgressAt = 0L
 
+    private var watchdogRunning = false
+
+    /** Tracks the current clip's progress: refills its retry budget, and catches stalls. */
     private val watchdog = object : Runnable {
         override fun run() {
-            if (released) return
+            if (released || !watchdogRunning) return
             checkForStall()
             handler.postDelayed(this, WATCHDOG_INTERVAL_MS)
         }
@@ -109,7 +124,17 @@ internal class DualVideoStateMachine(
 
     init {
         players.forEachIndexed { slot, p -> p.setVideoTextureView(textureViews[slot]) }
-        if (config.stallTimeoutMs > 0) handler.postDelayed(watchdog, WATCHDOG_INTERVAL_MS)
+    }
+
+    private fun startWatchdog() {
+        if (watchdogRunning || released) return
+        watchdogRunning = true
+        handler.postDelayed(watchdog, WATCHDOG_INTERVAL_MS)
+    }
+
+    private fun stopWatchdog() {
+        watchdogRunning = false
+        handler.removeCallbacks(watchdog)
     }
 
     private val inactiveSlot: Int
@@ -147,6 +172,10 @@ internal class DualVideoStateMachine(
 
     /** Loads [item] into [slot], paused. In hard-cut mode the decoder is not opened yet. */
     private fun load(slot: Int, item: PlaybackItem.Video) {
+        val replaced = items[slot]?.playbackId
+        if (replaced != null && replaced == trialPlaybackId && replaced != item.playbackId) {
+            endTrial("the parked clip was replaced before its cut")
+        }
         slotGeneration[slot]++
         retryCount[slot] = 0
         items[slot] = item
@@ -182,6 +211,7 @@ internal class DualVideoStateMachine(
         p.playWhenReady = true
         currentSlot = target
         resetWatchdog()
+        startWatchdog()
 
         if (deferred[target]) {
             // Hard cut: free the outgoing clip's decoder, then open the incoming one. The outgoing
@@ -191,6 +221,7 @@ internal class DualVideoStateMachine(
             clearSlot(old, keepFrame = true)
             if (aspect(target) == null) setAspect(target, item.aspectRatioHint)
             pendingFlip = target
+            cutRetryUsed = false
             p.prepare()
             return
         }
@@ -204,6 +235,12 @@ internal class DualVideoStateMachine(
         setReady(slot, true)
         if (slot != pendingFlip) return
         pendingFlip = -1
+        if (trialPlaybackId != null && items[slot]?.playbackId == trialPlaybackId) {
+            // The parked clip opened its decoder once the other was released: the device really
+            // can't run two at once.
+            Log.w(TAG, "Confirmed: device can't run two video decoders at once; keeping hard cuts")
+            trialPlaybackId = null
+        }
         val other = 1 - slot
         renderState = renderState.copy(activeSlot = slot)
         // The slot just hidden was frozen on the old clip's frame; it may since have been given
@@ -233,9 +270,9 @@ internal class DualVideoStateMachine(
         val item = items[slot] ?: return
         val message = error.message ?: error.errorCodeName
         Log.w(TAG, "Slot $slot (${item.assetId}): ${error.errorCodeName}: $message")
-        val isCurrent = slot == currentSlot
+        val code = error.errorCode
 
-        when (classifyError(error.errorCode)) {
+        when (classifyError(error)) {
             ErrorAction.REJOIN_LIVE -> if (retryCount[slot] < MAX_RETRIES) {
                 retryCount[slot]++
                 lastRetryAt[slot] = SystemClock.elapsedRealtime()
@@ -244,9 +281,29 @@ internal class DualVideoStateMachine(
                 return
             }
             ErrorAction.RETRY -> {
-                if (isDecoderResourceError(error.errorCode) && switchToSingleDecoder(slot)) return
-                if (retryCount[slot] < MAX_RETRIES) {
-                    scheduleRetry(slot)
+                if (isDecoderResourceError(code)) {
+                    if (slot == pendingFlip) {
+                        if (!cutRetryUsed) {
+                            // stop() on the outgoing player runs on its own playback thread, so
+                            // this one can reach codec init before the old codec is freed. Try
+                            // again shortly, without counting it against the clip.
+                            cutRetryUsed = true
+                            retryAfter(slot, CUT_RETRY_DELAY_MS)
+                            return
+                        }
+                        if (item.playbackId == trialPlaybackId) {
+                            // The other slot is empty and the decoder still won't open, so the
+                            // clip was at fault, not the device.
+                            fail(slot, message)
+                            return
+                        }
+                    } else if (switchToSingleDecoder(slot)) {
+                        return
+                    }
+                }
+                val limit = retryLimit(code)
+                if (retryCount[slot] < limit) {
+                    scheduleRetry(slot, limit)
                     return
                 }
             }
@@ -262,11 +319,12 @@ internal class DualVideoStateMachine(
     private fun switchToSingleDecoder(failedSlot: Int): Boolean {
         val other = 1 - failedSlot
         if (items[other] == null || deferred[other]) return false
-        if (!singleDecoderMode) {
-            Log.w(TAG, "Device can't run two video decoders at once; switching to hard cuts")
-            singleDecoderMode = true
-        }
         val staged = if (failedSlot == currentSlot) other else failedSlot
+        if (!singleDecoderMode) {
+            Log.w(TAG, "Second video decoder failed to open; trying hard cuts")
+            singleDecoderMode = true
+            trialPlaybackId = items[staged]?.playbackId
+        }
         // Park the staged clip without a decoder; play() opens it at the cut. Its player is idle
         // after the error (or is stopped here), and keeps its media item for that later prepare().
         // Bumping the generation drops any retry still queued for it, which would reopen a decoder.
@@ -280,14 +338,26 @@ internal class DualVideoStateMachine(
         return true
     }
 
-    private fun scheduleRetry(slot: Int) {
+    /** Uses up one of [limit] retries for [slot]; the last one rebuilds the player. */
+    private fun scheduleRetry(slot: Int, limit: Int = MAX_RETRIES) {
         retryCount[slot]++
         lastRetryAt[slot] = SystemClock.elapsedRealtime()
-        val generation = slotGeneration[slot]
         val attempt = retryCount[slot]
+        retryAfter(slot, RETRY_DELAY_MS * attempt, rebuild = attempt >= limit)
+    }
+
+    private fun retryAfter(slot: Int, delayMs: Long, rebuild: Boolean = false) {
+        val generation = slotGeneration[slot]
         handler.postDelayed({
-            if (!released && slotGeneration[slot] == generation) retry(slot, rebuild = attempt >= MAX_RETRIES)
-        }, RETRY_DELAY_MS * attempt)
+            if (!released && slotGeneration[slot] == generation) retry(slot, rebuild)
+        }, delayMs)
+    }
+
+    /** Drops a provisional switch to hard cuts, so the next clip is staged with its own decoder. */
+    private fun endTrial(reason: String) {
+        Log.w(TAG, "Back to seamless cuts: $reason")
+        singleDecoderMode = false
+        trialPlaybackId = null
     }
 
     private fun retry(slot: Int, rebuild: Boolean) {
@@ -319,15 +389,21 @@ internal class DualVideoStateMachine(
         val item = items[slot] ?: return
         val isCurrent = slot == currentSlot
         val visible = renderState.activeSlot
+        if (item.playbackId == trialPlaybackId) endTrial("the parked clip failed on its own")
         clearSlot(slot, keepFrame = isCurrent && slot == visible)
         if (isCurrent && slot != visible) {
             // A hard cut to this slot never drew, so the outgoing slot is still on screen with its
-            // last frame. Make that slot current again: the next clip is then staged on the hidden
-            // slot and the frozen frame stays up until the cut.
+            // last frame. Make that slot current again so the frozen frame stays up until the next
+            // cut. A clip already staged there (parked, so its decoder is closed) moves to the
+            // hidden slot, where the next play() expects it.
+            val staged = items[visible]
+            if (staged != null) clearSlot(visible, keepFrame = true)
             currentSlot = visible
             resetWatchdog()
+            if (staged != null) load(inactiveSlot, staged)
         }
         if (isCurrent) {
+            stopWatchdog()
             onErrorCallback?.invoke(message)
         } else {
             onPreloadErrorCallback?.invoke(item.assetId, message)
@@ -366,7 +442,7 @@ internal class DualVideoStateMachine(
             if (retryCount[slot] > 0 && now - lastRetryAt[slot] > RETRY_FORGET_MS) retryCount[slot] = 0
             return
         }
-        if (now - lastProgressAt < config.stallTimeoutMs) return
+        if (config.stallTimeoutMs <= 0 || now - lastProgressAt < config.stallTimeoutMs) return
 
         lastProgressAt = now
         val message = "Playback stalled for ${config.stallTimeoutMs / 1000}s"
@@ -384,6 +460,8 @@ internal class DualVideoStateMachine(
         clearSlot(1, keepFrame = false)
         currentSlot = 0
         pendingFlip = -1
+        if (trialPlaybackId != null) endTrial("playback was cleared")
+        stopWatchdog()
         resetWatchdog()
         renderState = renderState.copy(activeSlot = 0)
     }
@@ -444,8 +522,8 @@ internal class DualVideoStateMachine(
 
     private companion object {
         const val TAG = "GaplessVideo"
-        const val MAX_RETRIES = 3
         const val RETRY_DELAY_MS = 1_000L
+        const val CUT_RETRY_DELAY_MS = 150L
         const val RETRY_FORGET_MS = 30_000L
         const val WATCHDOG_INTERVAL_MS = 1_000L
     }

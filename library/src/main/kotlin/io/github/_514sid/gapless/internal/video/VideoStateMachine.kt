@@ -106,13 +106,9 @@ internal class VideoStateMachine(context: Context, config: GaplessVideoConfig = 
             while (exoPlayer.mediaItemCount > nextIndex) {
                 exoPlayer.removeMediaItem(exoPlayer.mediaItemCount - 1)
             }
-            // Track selection is player-wide, so only turn audio on here: turning it off would
-            // also mute the clip still playing.
-            if (item.volume > 0f) exoPlayer.setAudioEnabled(true)
             exoPlayer.addMediaItem(buildMediaItem(item))
         } else {
             renderState = renderState.copy(aspectRatio = item.aspectRatioHint)
-            exoPlayer.setAudioEnabled(item.volume > 0f)
             exoPlayer.setMediaItem(buildMediaItem(item))
             exoPlayer.playWhenReady = false
             exoPlayer.prepare()
@@ -152,7 +148,6 @@ internal class VideoStateMachine(context: Context, config: GaplessVideoConfig = 
             pausedAtEnd = false
             renderState = renderState.copy(aspectRatio = item.aspectRatioHint)
             exoPlayer.volume = item.volume
-            exoPlayer.setAudioEnabled(item.volume > 0f)
             exoPlayer.setMediaItem(buildMediaItem(item))
             exoPlayer.prepare()
             exoPlayer.play()
@@ -184,12 +179,6 @@ internal class VideoStateMachine(context: Context, config: GaplessVideoConfig = 
         textureViewRef?.bitmap
     } catch (_: OutOfMemoryError) {
         null
-    }
-
-    private fun ExoPlayer.setAudioEnabled(enabled: Boolean) {
-        trackSelectionParameters = trackSelectionParameters.buildUpon()
-            .setTrackTypeDisabled(C.TRACK_TYPE_AUDIO, !enabled)
-            .build()
     }
 
     override fun clear() {

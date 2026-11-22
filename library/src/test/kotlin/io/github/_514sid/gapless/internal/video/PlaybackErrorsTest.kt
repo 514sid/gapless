@@ -45,6 +45,25 @@ class PlaybackErrorsTest {
     }
 
     @Test
+    fun `server errors and rate limits are retried, other bad statuses are not`() {
+        val code = PlaybackException.ERROR_CODE_IO_BAD_HTTP_STATUS
+        listOf(408, 429, 500, 502, 503, 504).forEach {
+            assertEquals(ErrorAction.RETRY, classifyError(code, it), "status $it")
+        }
+        listOf(400, 401, 403, 404, 410).forEach {
+            assertEquals(ErrorAction.FATAL, classifyError(code, it), "status $it")
+        }
+        assertEquals(ErrorAction.FATAL, classifyError(code, null))
+    }
+
+    @Test
+    fun `damaged media gets a single retry`() {
+        assertEquals(1, retryLimit(PlaybackException.ERROR_CODE_DECODING_FAILED))
+        assertEquals(MAX_RETRIES, retryLimit(PlaybackException.ERROR_CODE_DECODER_INIT_FAILED))
+        assertEquals(MAX_RETRIES, retryLimit(PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_FAILED))
+    }
+
+    @Test
     fun `a live stream behind its window rejoins the live edge`() {
         assertEquals(ErrorAction.REJOIN_LIVE, classifyError(PlaybackException.ERROR_CODE_BEHIND_LIVE_WINDOW))
     }

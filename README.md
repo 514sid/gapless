@@ -230,17 +230,21 @@ The library is built so that a bad asset or a flaky device costs one asset, not 
 
 Video failures are retried inside the player before you hear about them:
 
-- Network errors, decoders that fail to open or are reclaimed, and audio output errors are retried up to
-  three times with a growing delay. The last retry rebuilds that slot's ExoPlayer.
+- Network errors, HTTP timeouts, rate limits and 5xx responses, decoders that fail to open or are
+  reclaimed, and audio output errors are retried up to three times with a growing delay. The last retry
+  rebuilds that slot's ExoPlayer. Other HTTP errors, such as 404, are reported at once.
+- A decoding error mid-stream, which usually means a damaged file, gets one retry on a new player before
+  it is reported.
 - A live stream that falls behind its window jumps back to the live edge.
 - A clip that stops advancing for `stallTimeoutMs` (15 seconds by default) is restarted.
 - `enableDecoderFallback` is on by default, so a hardware decoder that won't open falls back to another
   decoder, usually a software one.
-- Muted clips (`volume = 0`) don't select an audio track at all, so they need no audio decoder and an audio
+- With the default `DUAL_INSTANCE` strategy, muted clips (`volume = 0`) don't select an audio track at all, so they need no audio decoder and an audio
   output failure can't stop them.
 - Some devices can't run two hardware decoders at once, which the default `DUAL_INSTANCE` strategy needs
-  for seamless cuts. When the second decoder fails to open, the player switches to hard cuts for the rest of
-  the session: the old clip holds its last frame while the new one starts, instead of failing.
+  for seamless cuts. When the second decoder fails to open, the player switches to hard cuts: the old clip
+  holds its last frame while the new one starts, instead of failing. If the new clip's decoder still won't
+  open once the old one is released, the clip was the problem: it is reported and seamless cuts resume.
 
 What still reaches you:
 
