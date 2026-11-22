@@ -3,7 +3,9 @@ package io.github._514sid.gapless.internal.web
 import android.annotation.SuppressLint
 import android.content.Context
 import android.util.Log
+import android.view.ViewGroup
 import android.webkit.CookieManager
+import android.webkit.RenderProcessGoneDetail
 import android.webkit.WebChromeClient
 import android.webkit.WebResourceError
 import android.webkit.WebResourceRequest
@@ -16,13 +18,21 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import io.github._514sid.gapless.GaplessWebConfig
 import io.github._514sid.gapless.internal.PlaybackItem
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeout
 
+/**
+ * A/B web slots. The WebViews are created on the first web asset, not up front: constructing one
+ * throws when the device has no usable WebView provider (common on TV boxes while WebView updates),
+ * and that must fail only the web asset, not every playlist. A slot whose renderer process dies is
+ * destroyed and replaced, since an unhandled renderer death kills the app.
+ */
 @MainThread
 @SuppressLint("SetJavaScriptEnabled")
 internal class WebStateMachine(
@@ -38,19 +48,14 @@ internal class WebStateMachine(
             "<html><head><style>body { background-color: black; margin: 0; padding: 0; }</style></head><body></body></html>"
     }
 
-    init {
-        if (config.enableChromeDebugging) {
-            WebView.setWebContentsDebuggingEnabled(true)
-            logDebug("WebView remote debugging enabled via Chrome.")
-        }
-    }
+    private val views = arrayOfNulls<WebView>(2)
 
-    val webViewA: WebView = createWebView("Slot A")
-    val webViewB: WebView = createWebView("Slot B")
+    /** The URL each slot was last asked to load, or null while it shows the blank page. */
+    private val loadedUrls = arrayOfNulls<String>(2)
 
-    var renderState by mutableStateOf(
-        WebPlayerState(webViewA = webViewA, webViewB = webViewB, activeSlot = 0)
-    )
+    private var debuggingConfigured = false
+
+    var renderState by mutableStateOf(WebPlayerState())
         private set
 
     private var pendingItem: PlaybackItem.Web? = null
@@ -61,14 +66,17 @@ internal class WebStateMachine(
     /** True while the refresh loop is reloading the current page into the hidden slot. */
     private var isRefreshing = false
 
+    /** True while play() waits for the hidden slot to paint before swapping to it. */
+    private var awaitingSwap = false
+
     var pageCommitted: Boolean = false
         private set
 
     private val inactiveSlot: Int
         get() = if (renderState.activeSlot == 0) 1 else 0
 
-    private val inactiveWebView: WebView
-        get() = if (renderState.activeSlot == 0) webViewB else webViewA
+    private val inactiveWebView: WebView?
+        get() = views[inactiveSlot]
 
     /**
      * Debug logging, off unless enabled with `adb shell setprop log.tag.WebStateMachine DEBUG`.
@@ -78,24 +86,70 @@ internal class WebStateMachine(
         if (Log.isLoggable(TAG, Log.DEBUG)) Log.d(TAG, message)
     }
 
-    private fun WebView.slotName(): String = if (this === webViewA) "Slot A" else "Slot B"
+    private fun WebView.slotName(): String = if (this === views[0]) "Slot A" else "Slot B"
+
+    private fun slotOf(view: WebView): Int = views.indexOfFirst { it === view }
+
+    /** Creates any missing WebView. Returns an error message when WebView can't be created. */
+    private fun ensureViews(): String? {
+        if (views[0] != null && views[1] != null) return null
+        try {
+            if (!debuggingConfigured && config.enableChromeDebugging) {
+                WebView.setWebContentsDebuggingEnabled(true)
+                logDebug("WebView remote debugging enabled via Chrome.")
+            }
+            debuggingConfigured = true
+            for (slot in views.indices) {
+                if (views[slot] == null) views[slot] = createWebView(slot)
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "WebView is unavailable", e)
+            return "WebView is unavailable: ${e.message ?: e.javaClass.simpleName}"
+        } finally {
+            publishViews()
+        }
+        return null
+    }
+
+    private fun publishViews() {
+        renderState = renderState.copy(webViewA = views[0], webViewB = views[1])
+    }
+
+    private fun WebView.loadPage(url: String) {
+        val slot = slotOf(this)
+        if (slot >= 0) loadedUrls[slot] = url
+        post { loadUrl(url) }
+    }
 
     fun prepare(item: PlaybackItem.Web) {
         transitionJob?.cancel()
         refreshJob?.cancel()
 
+        ensureViews()?.let { message ->
+            pendingItem = null
+            pageCommitted = false
+            onPreloadError?.invoke(item.assetId, message)
+            return
+        }
+
         commitDeferred = CompletableDeferred()
         pageCommitted = false
         pendingItem = item
 
-        val targetView = inactiveWebView
+        val targetView = inactiveWebView ?: return
         logDebug("prepare(): Preloading URL into ${targetView.slotName()} -> ${item.url}")
-        targetView.post { targetView.loadUrl(item.url) }
+        targetView.loadPage(item.url)
     }
 
     fun play(item: PlaybackItem.Web) {
         transitionJob?.cancel()
         refreshJob?.cancel()
+
+        ensureViews()?.let { message ->
+            pendingItem = null
+            onError?.invoke(message)
+            return
+        }
 
         val target = inactiveSlot
         val alreadyCommitted = pendingItem?.playbackId == item.playbackId && pageCommitted
@@ -103,8 +157,7 @@ internal class WebStateMachine(
         if (pendingItem?.playbackId != item.playbackId) {
             Log.w(TAG, "play(): Item was NOT pending! Forcing immediate load.")
             commitDeferred = CompletableDeferred()
-            val targetView = inactiveWebView
-            targetView.post { targetView.loadUrl(item.url) }
+            inactiveWebView?.loadPage(item.url)
         }
 
         pendingItem = null
@@ -118,7 +171,7 @@ internal class WebStateMachine(
             transitionJob = scope.launch {
                 delay(150)
                 if (renderState.activeSlot == target) {
-                    inactiveWebView.loadBlank()
+                    inactiveWebView?.loadBlank()
                 }
                 if (item.refreshIntervalMs > 0L) {
                     startSeamlessRefreshLoop(item)
@@ -130,18 +183,31 @@ internal class WebStateMachine(
         transitionJob = scope.launch {
             logDebug("play(): Waiting for page to visually commit before swapping...")
 
-            try {
+            awaitingSwap = true
+            val swap = try {
                 withTimeout(5000) { commitDeferred?.await() }
                 logDebug("play(): Pixels painted! Swapping instantly to slot $target.")
+                true
+            } catch (_: TimeoutCancellationException) {
+                Log.w(TAG, "play(): Page did not paint in time; swapping anyway.")
+                true
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
-                Log.w(TAG, "play(): Force swapping! Wait failed or timed out: ${e.message}")
+                // The page failed or its renderer died, and that was already reported. Swapping
+                // would put a blank slot on screen and blank the page still showing.
+                Log.w(TAG, "play(): Page failed before painting; keeping the current page: ${e.message}")
+                false
+            } finally {
+                awaitingSwap = false
             }
+            if (!swap) return@launch
 
             renderState = renderState.copy(activeSlot = target)
 
             delay(150)
             if (renderState.activeSlot == target) {
-                inactiveWebView.loadBlank()
+                inactiveWebView?.loadBlank()
             }
 
             if (item.refreshIntervalMs > 0L) {
@@ -160,12 +226,12 @@ internal class WebStateMachine(
                 if (pendingItem != null) break
 
                 val target = inactiveSlot
-                val targetView = inactiveWebView
+                val targetView = inactiveWebView ?: continue
 
                 logDebug("Refresh triggered: Preloading ${item.url} into ${targetView.slotName()}")
                 commitDeferred = CompletableDeferred()
                 isRefreshing = true
-                targetView.post { targetView.loadUrl(item.url) }
+                targetView.loadPage(item.url)
 
                 try {
                     withTimeout(5000) { commitDeferred?.await() }
@@ -177,11 +243,11 @@ internal class WebStateMachine(
 
                     delay(150)
                     if (renderState.activeSlot == target) {
-                        inactiveWebView.loadBlank()
+                        inactiveWebView?.loadBlank()
                     }
                 } catch (_: Exception) {
                     Log.w(TAG, "Refresh failed or timed out. Keeping current page visible.")
-                    inactiveWebView.loadBlank()
+                    inactiveWebView?.loadBlank()
                 } finally {
                     isRefreshing = false
                 }
@@ -195,8 +261,7 @@ internal class WebStateMachine(
         refreshJob?.cancel()
         commitDeferred?.cancel()
         pendingItem = null
-        webViewA.loadBlank()
-        webViewB.loadBlank()
+        views.forEach { it?.loadBlank() }
         renderState = renderState.copy(activeSlot = 0)
     }
 
@@ -206,12 +271,60 @@ internal class WebStateMachine(
         refreshJob?.cancel()
         commitDeferred?.cancel()
         clear()
-        webViewA.destroy()
-        webViewB.destroy()
+        for (slot in views.indices) {
+            views[slot]?.destroy()
+            views[slot] = null
+        }
+        publishViews()
     }
 
-    private fun createWebView(slotIdentifier: String) = WebView(context).apply {
-        logDebug("createWebView(): Instantiating $slotIdentifier")
+    /**
+     * The renderer behind [view] crashed or was killed to reclaim memory. Returning false from
+     * [WebViewClient.onRenderProcessGone] makes Android kill the app, so replace the WebView and
+     * report the loss against whatever asset that slot was showing or loading.
+     */
+    private fun onRendererGone(view: WebView) {
+        val slot = slotOf(view)
+        if (slot < 0) return
+        val hadPage = loadedUrls[slot] != null
+        val wasActive = slot == renderState.activeSlot
+        // Read before the deferred completes below, which lets play() resume and clear the flag.
+        val swapPending = awaitingSwap
+        val message = "WebView renderer gone on ${view.slotName()}"
+        Log.e(TAG, message)
+
+        // A dead WebView must leave the hierarchy before it is destroyed.
+        (view.parent as? ViewGroup)?.removeView(view)
+        view.destroy()
+        views[slot] = null
+        loadedUrls[slot] = null
+        try {
+            views[slot] = createWebView(slot)
+        } catch (e: Exception) {
+            Log.e(TAG, "Could not replace WebView on slot $slot", e)
+        }
+        publishViews()
+
+        if (!hadPage) return
+        if (!wasActive) commitDeferred?.completeExceptionally(Exception(message))
+        val pending = pendingItem
+        when {
+            wasActive -> {
+                refreshJob?.cancel()
+                onError?.invoke(message)
+            }
+            pending != null -> {
+                pendingItem = null
+                onPreloadError?.invoke(pending.assetId, message)
+            }
+            swapPending -> onError?.invoke(message)
+            // A refresh or a page already swapped out: the visible page is unaffected.
+            else -> Unit
+        }
+    }
+
+    private fun createWebView(slot: Int) = WebView(context).apply {
+        logDebug("createWebView(): Instantiating slot $slot")
         setBackgroundColor(android.graphics.Color.BLACK)
 
         setInitialScale(100)
@@ -248,6 +361,11 @@ internal class WebStateMachine(
                     reportMainFrameError(view, message)
                 }
             }
+
+            override fun onRenderProcessGone(view: WebView, detail: RenderProcessGoneDetail): Boolean {
+                onRendererGone(view)
+                return true
+            }
         }
 
         webChromeClient = WebChromeClient()
@@ -283,6 +401,8 @@ internal class WebStateMachine(
     }
 
     private fun WebView.loadBlank() {
+        val slot = slotOf(this)
+        if (slot >= 0) loadedUrls[slot] = null
         this.loadData(BLANK_PAGE, "text/html", "UTF-8")
     }
 }

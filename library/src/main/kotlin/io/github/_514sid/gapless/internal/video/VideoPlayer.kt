@@ -8,7 +8,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
@@ -51,15 +50,9 @@ internal fun VideoPlayer(
             )
         }
 
+        // Not recycled by hand: a render node can still hold the bitmap for a frame after it leaves
+        // the composition, and drawing a recycled bitmap crashes. The GC reclaims it.
         state.snapshot?.let { bitmap ->
-            DisposableEffect(bitmap) {
-                onDispose {
-                    if (!bitmap.isRecycled) {
-                        bitmap.recycle()
-                    }
-                }
-            }
-
             Box(
                 modifier = Modifier
                     .fillMaxSize()

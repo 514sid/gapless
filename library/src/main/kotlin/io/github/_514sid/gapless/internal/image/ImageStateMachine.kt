@@ -81,10 +81,17 @@ internal class ImageStateMachine(
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                prepareFailed = true
-                onError?.invoke(item.assetId, e.message ?: "Image load failed")
+                fail(item, e)
+            } catch (e: OutOfMemoryError) {
+                // An oversized image must not take the app down with it.
+                fail(item, e)
             }
         }
+    }
+
+    private fun fail(item: PlaybackItem.Image, error: Throwable) {
+        prepareFailed = true
+        onError?.invoke(item.assetId, error.message ?: "Image load failed")
     }
 
     fun play(item: PlaybackItem.Image) {
