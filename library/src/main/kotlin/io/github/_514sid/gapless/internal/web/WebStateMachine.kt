@@ -18,9 +18,11 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import io.github._514sid.gapless.GaplessWebConfig
 import io.github._514sid.gapless.internal.PlaybackItem
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeout
@@ -182,14 +184,24 @@ internal class WebStateMachine(
             logDebug("play(): Waiting for page to visually commit before swapping...")
 
             awaitingSwap = true
-            try {
+            val swap = try {
                 withTimeout(5000) { commitDeferred?.await() }
                 logDebug("play(): Pixels painted! Swapping instantly to slot $target.")
+                true
+            } catch (_: TimeoutCancellationException) {
+                Log.w(TAG, "play(): Page did not paint in time; swapping anyway.")
+                true
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
-                Log.w(TAG, "play(): Force swapping! Wait failed or timed out: ${e.message}")
+                // The page failed or its renderer died, and that was already reported. Swapping
+                // would put a blank slot on screen and blank the page still showing.
+                Log.w(TAG, "play(): Page failed before painting; keeping the current page: ${e.message}")
+                false
             } finally {
                 awaitingSwap = false
             }
+            if (!swap) return@launch
 
             renderState = renderState.copy(activeSlot = target)
 
@@ -276,6 +288,8 @@ internal class WebStateMachine(
         if (slot < 0) return
         val hadPage = loadedUrls[slot] != null
         val wasActive = slot == renderState.activeSlot
+        // Read before the deferred completes below, which lets play() resume and clear the flag.
+        val swapPending = awaitingSwap
         val message = "WebView renderer gone on ${view.slotName()}"
         Log.e(TAG, message)
 
@@ -303,7 +317,7 @@ internal class WebStateMachine(
                 pendingItem = null
                 onPreloadError?.invoke(pending.assetId, message)
             }
-            awaitingSwap -> onError?.invoke(message)
+            swapPending -> onError?.invoke(message)
             // A refresh or a page already swapped out: the visible page is unaffected.
             else -> Unit
         }

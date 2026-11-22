@@ -115,8 +115,12 @@ internal class DualVideoStateMachine(
     private val inactiveSlot: Int
         get() = 1 - currentSlot
 
-    /** True while a hard cut keeps [slot] on screen, frozen on the outgoing clip's last frame. */
-    private fun isFrozen(slot: Int) = pendingFlip != -1 && slot == renderState.activeSlot
+    /**
+     * True while a hard cut keeps [slot] on screen, frozen on the outgoing clip's last frame. The
+     * incoming slot never counts, even when a newer clip reuses the slot on screen.
+     */
+    private fun isFrozen(slot: Int) =
+        pendingFlip != -1 && slot != pendingFlip && slot == renderState.activeSlot
 
     private fun ready(slot: Int) = if (slot == 0) readyA else readyB
 
@@ -265,7 +269,10 @@ internal class DualVideoStateMachine(
         val staged = if (failedSlot == currentSlot) other else failedSlot
         // Park the staged clip without a decoder; play() opens it at the cut. Its player is idle
         // after the error (or is stopped here), and keeps its media item for that later prepare().
+        // Bumping the generation drops any retry still queued for it, which would reopen a decoder.
         players[staged].stop()
+        slotGeneration[staged]++
+        retryCount[staged] = 0
         deferred[staged] = true
         setReady(staged, true)
         // If the clip on screen was the one that lost out, it can have the decoder back now.
@@ -285,6 +292,7 @@ internal class DualVideoStateMachine(
 
     private fun retry(slot: Int, rebuild: Boolean) {
         val item = items[slot] ?: return
+        if (deferred[slot]) return
         setReady(slot, false)
         if (!rebuild) {
             players[slot].prepare()
@@ -310,7 +318,15 @@ internal class DualVideoStateMachine(
     private fun fail(slot: Int, message: String) {
         val item = items[slot] ?: return
         val isCurrent = slot == currentSlot
-        clearSlot(slot, keepFrame = isCurrent)
+        val visible = renderState.activeSlot
+        clearSlot(slot, keepFrame = isCurrent && slot == visible)
+        if (isCurrent && slot != visible) {
+            // A hard cut to this slot never drew, so the outgoing slot is still on screen with its
+            // last frame. Make that slot current again: the next clip is then staged on the hidden
+            // slot and the frozen frame stays up until the cut.
+            currentSlot = visible
+            resetWatchdog()
+        }
         if (isCurrent) {
             onErrorCallback?.invoke(message)
         } else {
