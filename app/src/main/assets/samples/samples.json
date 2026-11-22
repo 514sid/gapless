@@ -1,0 +1,490 @@
+{
+  "assets": [
+    {
+      "id": "h264_1080p30",
+      "mimeType": "video/mp4",
+      "width": 1920,
+      "height": 1080,
+      "durationMs": 6000,
+      "uri": "file:///android_asset/samples/h264_1080p30.mp4"
+    },
+    {
+      "id": "h264_1080p60",
+      "mimeType": "video/mp4",
+      "width": 1920,
+      "height": 1080,
+      "durationMs": 6000,
+      "uri": "file:///android_asset/samples/h264_1080p60.mp4"
+    },
+    {
+      "id": "h264_1080p25",
+      "mimeType": "video/mp4",
+      "width": 1920,
+      "height": 1080,
+      "durationMs": 6000,
+      "uri": "file:///android_asset/samples/h264_1080p25.mp4"
+    },
+    {
+      "id": "h264_720p30_noaudio",
+      "mimeType": "video/mp4",
+      "width": 1280,
+      "height": 720,
+      "durationMs": 6000,
+      "uri": "file:///android_asset/samples/h264_720p30_noaudio.mp4"
+    },
+    {
+      "id": "h264_720p30",
+      "mimeType": "video/mp4",
+      "width": 1280,
+      "height": 720,
+      "durationMs": 6000,
+      "uri": "file:///android_asset/samples/h264_720p30.mp4"
+    },
+    {
+      "id": "hevc_720p30",
+      "mimeType": "video/mp4",
+      "width": 1280,
+      "height": 720,
+      "durationMs": 6000,
+      "uri": "file:///android_asset/samples/hevc_720p30.mp4"
+    },
+    {
+      "id": "vp9_720p30",
+      "mimeType": "video/webm",
+      "width": 1280,
+      "height": 720,
+      "durationMs": 6000,
+      "uri": "file:///android_asset/samples/vp9_720p30.webm"
+    },
+    {
+      "id": "h264_1080p30_mp3",
+      "mimeType": "video/mp4",
+      "width": 1920,
+      "height": 1080,
+      "durationMs": 6000,
+      "uri": "file:///android_asset/samples/h264_1080p30_mp3.mp4"
+    },
+    {
+      "id": "h264_1080x1920p30_portrait",
+      "mimeType": "video/mp4",
+      "width": 1080,
+      "height": 1920,
+      "durationMs": 6000,
+      "uri": "file:///android_asset/samples/h264_1080x1920p30_portrait.mp4"
+    },
+    {
+      "id": "h264_2160p30",
+      "mimeType": "video/mp4",
+      "width": 3840,
+      "height": 2160,
+      "durationMs": 6000,
+      "uri": "file:///android_asset/samples/h264_2160p30.mp4"
+    },
+    {
+      "id": "hevc_1080p30",
+      "mimeType": "video/mp4",
+      "width": 1920,
+      "height": 1080,
+      "durationMs": 6000,
+      "uri": "file:///android_asset/samples/hevc_1080p30.mp4"
+    },
+    {
+      "id": "hevc_2160p30_10bit",
+      "mimeType": "video/mp4",
+      "width": 3840,
+      "height": 2160,
+      "durationMs": 6000,
+      "uri": "file:///android_asset/samples/hevc_2160p30_10bit.mp4"
+    },
+    {
+      "id": "vp9_1080p30",
+      "mimeType": "video/webm",
+      "width": 1920,
+      "height": 1080,
+      "durationMs": 6000,
+      "uri": "file:///android_asset/samples/vp9_1080p30.webm"
+    },
+    {
+      "id": "av1_1080p30",
+      "mimeType": "video/mp4",
+      "width": 1920,
+      "height": 1080,
+      "durationMs": 6000,
+      "uri": "file:///android_asset/samples/av1_1080p30.mp4"
+    },
+    {
+      "id": "short_a_1s",
+      "mimeType": "video/mp4",
+      "width": 1920,
+      "height": 1080,
+      "durationMs": 1000,
+      "uri": "file:///android_asset/samples/short_a_1s.mp4"
+    },
+    {
+      "id": "short_b_1s",
+      "mimeType": "video/mp4",
+      "width": 1920,
+      "height": 1080,
+      "durationMs": 1000,
+      "uri": "file:///android_asset/samples/short_b_1s.mp4"
+    },
+    {
+      "id": "broken_hevc_444",
+      "mimeType": "video/mp4",
+      "width": 1920,
+      "height": 1080,
+      "durationMs": 3000,
+      "broken": true,
+      "uri": "file:///android_asset/samples/broken_hevc_444.mp4"
+    },
+    {
+      "id": "broken_hevc_4320p",
+      "mimeType": "video/mp4",
+      "width": 7680,
+      "height": 4320,
+      "durationMs": 2000,
+      "broken": true,
+      "uri": "file:///android_asset/samples/broken_hevc_4320p.mp4"
+    },
+    {
+      "id": "image_1920x1080_jpg",
+      "mimeType": "image/jpeg",
+      "width": 1920,
+      "height": 1080,
+      "durationMs": 4000,
+      "uri": "file:///android_asset/samples/image_1920x1080_jpg.jpg"
+    },
+    {
+      "id": "image_1920x1080_png",
+      "mimeType": "image/png",
+      "width": 1920,
+      "height": 1080,
+      "durationMs": 4000,
+      "uri": "file:///android_asset/samples/image_1920x1080_png.png"
+    },
+    {
+      "id": "image_1920x1080_webp",
+      "mimeType": "image/webp",
+      "width": 1920,
+      "height": 1080,
+      "durationMs": 4000,
+      "uri": "file:///android_asset/samples/image_1920x1080_webp.webp"
+    },
+    {
+      "id": "image_1080x1920_portrait_jpg",
+      "mimeType": "image/jpeg",
+      "width": 1080,
+      "height": 1920,
+      "durationMs": 4000,
+      "uri": "file:///android_asset/samples/image_1080x1920_portrait_jpg.jpg"
+    },
+    {
+      "id": "image_3840x2160_jpg",
+      "mimeType": "image/jpeg",
+      "width": 3840,
+      "height": 2160,
+      "durationMs": 4000,
+      "uri": "file:///android_asset/samples/image_3840x2160_jpg.jpg"
+    },
+    {
+      "id": "image_8000x6000_huge_jpg",
+      "mimeType": "image/jpeg",
+      "width": 8000,
+      "height": 6000,
+      "durationMs": 4000,
+      "uri": "file:///android_asset/samples/image_8000x6000_huge_jpg.jpg"
+    },
+    {
+      "id": "image_640x360_small_png",
+      "mimeType": "image/png",
+      "width": 640,
+      "height": 360,
+      "durationMs": 4000,
+      "uri": "file:///android_asset/samples/image_640x360_small_png.png"
+    },
+    {
+      "id": "image_1920x1080_alpha_png",
+      "mimeType": "image/png",
+      "width": 1920,
+      "height": 1080,
+      "durationMs": 4000,
+      "uri": "file:///android_asset/samples/image_1920x1080_alpha_png.png"
+    },
+    {
+      "id": "web_timer",
+      "mimeType": "text/html",
+      "durationMs": 6000,
+      "uri": "file:///android_asset/samples/web_timer.html"
+    },
+    {
+      "id": "broken_truncated_mp4",
+      "mimeType": "video/mp4",
+      "width": 1920,
+      "height": 1080,
+      "durationMs": 6000,
+      "note": "First 40% of h264_1080p30: plays, then fails partway through",
+      "broken": true,
+      "uri": "file:///android_asset/samples/broken_truncated_mp4.mp4"
+    },
+    {
+      "id": "broken_corrupt_bitstream_mp4",
+      "mimeType": "video/mp4",
+      "width": 1920,
+      "height": 1080,
+      "durationMs": 6000,
+      "note": "Valid container, H.264 packets with random bytes flipped",
+      "broken": true,
+      "uri": "file:///android_asset/samples/broken_corrupt_bitstream_mp4.mp4"
+    },
+    {
+      "id": "broken_garbage_mp4",
+      "mimeType": "video/mp4",
+      "width": 1920,
+      "height": 1080,
+      "durationMs": 6000,
+      "note": "Random bytes named .mp4",
+      "broken": true,
+      "uri": "file:///android_asset/samples/broken_garbage_mp4.mp4"
+    },
+    {
+      "id": "broken_empty_mp4",
+      "mimeType": "video/mp4",
+      "width": 1920,
+      "height": 1080,
+      "durationMs": 6000,
+      "note": "Zero-byte file",
+      "broken": true,
+      "uri": "file:///android_asset/samples/broken_empty_mp4.mp4"
+    },
+    {
+      "id": "broken_missing_mp4",
+      "mimeType": "video/mp4",
+      "width": 1920,
+      "height": 1080,
+      "durationMs": 6000,
+      "note": "No such file in the APK",
+      "broken": true,
+      "uri": "file:///android_asset/samples/broken_missing_mp4.mp4"
+    },
+    {
+      "id": "broken_image_as_video",
+      "mimeType": "video/mp4",
+      "width": 1920,
+      "height": 1080,
+      "durationMs": 4000,
+      "note": "A JPEG with a video MIME type",
+      "broken": true,
+      "uri": "file:///android_asset/samples/image_1920x1080_jpg.jpg"
+    },
+    {
+      "id": "broken_garbage_jpg",
+      "mimeType": "image/jpeg",
+      "width": 1920,
+      "height": 1080,
+      "durationMs": 4000,
+      "note": "Random bytes named .jpg",
+      "broken": true,
+      "uri": "file:///android_asset/samples/broken_garbage_jpg.jpg"
+    },
+    {
+      "id": "broken_truncated_jpg",
+      "mimeType": "image/jpeg",
+      "width": 3840,
+      "height": 2160,
+      "durationMs": 4000,
+      "note": "First half of a 4K JPEG; some decoders show the top half, some fail",
+      "broken": true,
+      "uri": "file:///android_asset/samples/broken_truncated_jpg.jpg"
+    },
+    {
+      "id": "broken_empty_png",
+      "mimeType": "image/png",
+      "width": 1920,
+      "height": 1080,
+      "durationMs": 4000,
+      "note": "Zero-byte file",
+      "broken": true,
+      "uri": "file:///android_asset/samples/broken_empty_png.png"
+    },
+    {
+      "id": "broken_missing_png",
+      "mimeType": "image/png",
+      "width": 1920,
+      "height": 1080,
+      "durationMs": 4000,
+      "note": "No such file in the APK",
+      "broken": true,
+      "uri": "file:///android_asset/samples/broken_missing_png.png"
+    },
+    {
+      "id": "broken_png_bomb",
+      "mimeType": "image/png",
+      "width": 20000,
+      "height": 20000,
+      "durationMs": 4000,
+      "note": "20000x20000 PNG, 1.6 GB once decoded at full size",
+      "broken": true,
+      "uri": "file:///android_asset/samples/broken_png_bomb.png"
+    },
+    {
+      "id": "broken_video_as_image",
+      "mimeType": "image/jpeg",
+      "width": 1920,
+      "height": 1080,
+      "durationMs": 4000,
+      "note": "An MP4 with an image MIME type",
+      "broken": true,
+      "uri": "file:///android_asset/samples/h264_1080p30.mp4"
+    },
+    {
+      "id": "broken_missing_web",
+      "mimeType": "text/html",
+      "durationMs": 6000,
+      "note": "No such page in the APK",
+      "broken": true,
+      "uri": "file:///android_asset/samples/broken_missing_web.html"
+    },
+    {
+      "id": "broken_unreachable_web",
+      "uri": "https://unreachable.invalid/",
+      "mimeType": "text/html",
+      "durationMs": 6000,
+      "note": "A host that never resolves",
+      "broken": true
+    }
+  ],
+  "playlists": {
+    "codecs": [
+      "h264_1080p30",
+      "hevc_1080p30",
+      "vp9_1080p30",
+      "av1_1080p30",
+      "h264_2160p30",
+      "hevc_2160p30_10bit",
+      "h264_1080p30_mp3",
+      "h264_720p30_noaudio"
+    ],
+    "framerates": [
+      "h264_1080p25",
+      "h264_1080p30",
+      "h264_1080p60"
+    ],
+    "fast": [
+      "short_a_1s",
+      "short_b_1s"
+    ],
+    "audio": [
+      "h264_1080p30",
+      "h264_1080p30_mp3",
+      "vp9_1080p30",
+      "h264_720p30_noaudio"
+    ],
+    "images": [
+      "image_1920x1080_jpg",
+      "image_1920x1080_png",
+      "image_1920x1080_webp",
+      "image_1080x1920_portrait_jpg",
+      "image_3840x2160_jpg",
+      "image_8000x6000_huge_jpg",
+      "image_640x360_small_png",
+      "image_1920x1080_alpha_png"
+    ],
+    "mixed": [
+      "h264_1080p30",
+      "image_1920x1080_jpg",
+      "web_timer",
+      "hevc_1080p30",
+      "image_8000x6000_huge_jpg",
+      "vp9_1080p30",
+      "image_1920x1080_alpha_png"
+    ],
+    "portrait": [
+      "h264_1080x1920p30_portrait",
+      "image_1080x1920_portrait_jpg"
+    ],
+    "split_720p": [
+      "h264_720p30",
+      "hevc_720p30",
+      "vp9_720p30"
+    ],
+    "all": [
+      "h264_1080p30",
+      "h264_1080p60",
+      "h264_1080p25",
+      "h264_720p30_noaudio",
+      "h264_720p30",
+      "hevc_720p30",
+      "vp9_720p30",
+      "h264_1080p30_mp3",
+      "h264_1080x1920p30_portrait",
+      "h264_2160p30",
+      "hevc_1080p30",
+      "hevc_2160p30_10bit",
+      "vp9_1080p30",
+      "av1_1080p30",
+      "short_a_1s",
+      "short_b_1s",
+      "image_1920x1080_jpg",
+      "image_1920x1080_png",
+      "image_1920x1080_webp",
+      "image_1080x1920_portrait_jpg",
+      "image_3840x2160_jpg",
+      "image_8000x6000_huge_jpg",
+      "image_640x360_small_png",
+      "image_1920x1080_alpha_png",
+      "web_timer"
+    ],
+    "broken": [
+      "broken_truncated_mp4",
+      "h264_1080p30",
+      "broken_corrupt_bitstream_mp4",
+      "h264_1080p30",
+      "broken_garbage_mp4",
+      "h264_1080p30",
+      "broken_empty_mp4",
+      "h264_1080p30",
+      "broken_missing_mp4",
+      "h264_1080p30",
+      "broken_image_as_video",
+      "h264_1080p30",
+      "broken_garbage_jpg",
+      "h264_1080p30",
+      "broken_truncated_jpg",
+      "h264_1080p30",
+      "broken_empty_png",
+      "h264_1080p30",
+      "broken_missing_png",
+      "h264_1080p30",
+      "broken_png_bomb",
+      "h264_1080p30",
+      "broken_video_as_image",
+      "h264_1080p30",
+      "broken_missing_web",
+      "h264_1080p30",
+      "broken_unreachable_web",
+      "h264_1080p30",
+      "broken_hevc_444",
+      "h264_1080p30",
+      "broken_hevc_4320p",
+      "h264_1080p30"
+    ],
+    "broken_only": [
+      "broken_truncated_mp4",
+      "broken_corrupt_bitstream_mp4",
+      "broken_garbage_mp4",
+      "broken_empty_mp4",
+      "broken_missing_mp4",
+      "broken_image_as_video",
+      "broken_garbage_jpg",
+      "broken_truncated_jpg",
+      "broken_empty_png",
+      "broken_missing_png",
+      "broken_png_bomb",
+      "broken_video_as_image",
+      "broken_missing_web",
+      "broken_unreachable_web",
+      "broken_hevc_444",
+      "broken_hevc_4320p"
+    ]
+  }
+}
