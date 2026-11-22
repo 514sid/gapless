@@ -20,7 +20,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import java.util.UUID
-import androidx.core.net.toUri
+import android.net.Uri
 
 /**
  * Drives playback: the host prepares the next asset, then asks to play it on its own schedule.
@@ -329,7 +329,7 @@ class GaplessController(
     private fun toPlaybackItem(g: GaplessAsset): PlaybackItem {
         val item = when {
             g.isVideo -> PlaybackItem.Video(
-                uri = g.uri.toUri(),
+                uri = Uri.parse(g.uri),
                 mimeType = g.mimeType,
                 aspectRatioHint = aspectRatioOf(g.width, g.height),
                 volume = g.volume,

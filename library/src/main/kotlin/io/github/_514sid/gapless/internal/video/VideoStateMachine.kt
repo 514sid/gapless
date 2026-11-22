@@ -23,7 +23,7 @@ import io.github._514sid.gapless.internal.PlaybackItem
 @OptIn(UnstableApi::class)
 internal class VideoStateMachine(context: Context, config: GaplessVideoConfig = GaplessVideoConfig()) : VideoEngine {
 
-    val exoPlayer: ExoPlayer = ExoPlayer.Builder(context)
+    private val exoPlayer: ExoPlayer = ExoPlayer.Builder(context)
         .setRenderersFactory(DefaultRenderersFactory(context).setEnableDecoderFallback(config.enableDecoderFallback))
         .setLoadControl(
             DefaultLoadControl.Builder()
@@ -65,9 +65,6 @@ internal class VideoStateMachine(context: Context, config: GaplessVideoConfig = 
             })
         }
 
-    val durationMs: Long?
-        get() = exoPlayer.duration.takeIf { it != C.TIME_UNSET }
-
     private val bufferForPlaybackMs: Long = config.bufferForPlaybackMs.toLong()
 
     override val isNextReady: Boolean
@@ -84,7 +81,7 @@ internal class VideoStateMachine(context: Context, config: GaplessVideoConfig = 
     var renderState by mutableStateOf(VideoPlayerState())
         private set
 
-    var textureViewRef: TextureView? = null
+    private var textureViewRef: TextureView? = null
         set(value) {
             val changed = value != field
             field = value
@@ -98,14 +95,12 @@ internal class VideoStateMachine(context: Context, config: GaplessVideoConfig = 
     override var onPreloadErrorCallback: ((assetId: String, message: String) -> Unit)? = null
 
     private var pendingItem: PlaybackItem.Video? = null
-    private var isPreloaded = false
     private var isPlaying = false
 
     private var pausedAtEnd = false
 
     override fun prepare(item: PlaybackItem.Video) {
         pendingItem = item
-        isPreloaded = false
 
         if (isPlaying) {
             val nextIndex = exoPlayer.currentMediaItemIndex + 1
@@ -161,32 +156,19 @@ internal class VideoStateMachine(context: Context, config: GaplessVideoConfig = 
         isPlaying = true
     }
 
-    fun onFirstFrameRendered() {
-        isPreloaded = true
+    private fun onFirstFrameRendered() {
         renderState = renderState.copy(snapshot = null)
     }
 
-    fun handleErrorState() {
-        isPreloaded = false
+    private fun handleErrorState() {
         pendingItem = null
         renderState = renderState.copy(snapshot = null)
-    }
-
-    fun cancelPrepare() {
-        pendingItem = null
-        isPreloaded = false
-        if (!isPlaying) {
-            exoPlayer.stop()
-            exoPlayer.clearMediaItems()
-            renderState = renderState.copy(aspectRatio = null)
-        }
     }
 
     override fun clear() {
         exoPlayer.stop()
         exoPlayer.clearMediaItems()
         isPlaying = false
-        isPreloaded = false
         pausedAtEnd = false
         pendingItem = null
         renderState = VideoPlayerState()

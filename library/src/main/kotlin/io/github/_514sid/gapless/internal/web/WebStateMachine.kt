@@ -41,7 +41,7 @@ internal class WebStateMachine(
     init {
         if (config.enableChromeDebugging) {
             WebView.setWebContentsDebuggingEnabled(true)
-            Log.d(TAG, "WebView remote debugging enabled via Chrome.")
+            logDebug("WebView remote debugging enabled via Chrome.")
         }
     }
 
@@ -70,6 +70,14 @@ internal class WebStateMachine(
     private val inactiveWebView: WebView
         get() = if (renderState.activeSlot == 0) webViewB else webViewA
 
+    /**
+     * Debug logging, off unless enabled with `adb shell setprop log.tag.WebStateMachine DEBUG`.
+     * These lines include page URLs, which may carry tokens, so they stay out of release logs.
+     */
+    private fun logDebug(message: String) {
+        if (Log.isLoggable(TAG, Log.DEBUG)) Log.d(TAG, message)
+    }
+
     private fun WebView.slotName(): String = if (this === webViewA) "Slot A" else "Slot B"
 
     fun prepare(item: PlaybackItem.Web) {
@@ -81,7 +89,7 @@ internal class WebStateMachine(
         pendingItem = item
 
         val targetView = inactiveWebView
-        Log.d(TAG, "prepare(): Preloading URL into ${targetView.slotName()} -> ${item.url}")
+        logDebug("prepare(): Preloading URL into ${targetView.slotName()} -> ${item.url}")
         targetView.post { targetView.loadUrl(item.url) }
     }
 
@@ -103,9 +111,9 @@ internal class WebStateMachine(
 
         if (alreadyCommitted) {
             // The preloaded page has already painted, so swap synchronously. Deferring to a
-            // coroutine here lets a subsequent cancelPrepare() (fired when the next, non-web asset
-            // is prepared) cancel the swap before it applies, leaving a blank slot on screen.
-            Log.d(TAG, "play(): Already committed, swapping immediately to slot $target.")
+            // coroutine here would let a following prepare() of a non-web asset clear the web
+            // slots before the swap applies, leaving a blank slot on screen.
+            logDebug("play(): Already committed, swapping immediately to slot $target.")
             renderState = renderState.copy(activeSlot = target)
             transitionJob = scope.launch {
                 delay(150)
@@ -120,11 +128,11 @@ internal class WebStateMachine(
         }
 
         transitionJob = scope.launch {
-            Log.d(TAG, "play(): Waiting for page to visually commit before swapping...")
+            logDebug("play(): Waiting for page to visually commit before swapping...")
 
             try {
                 withTimeout(5000) { commitDeferred?.await() }
-                Log.d(TAG, "play(): Pixels painted! Swapping instantly to slot $target.")
+                logDebug("play(): Pixels painted! Swapping instantly to slot $target.")
             } catch (e: Exception) {
                 Log.w(TAG, "play(): Force swapping! Wait failed or timed out: ${e.message}")
             }
@@ -143,7 +151,7 @@ internal class WebStateMachine(
     }
 
     private fun startSeamlessRefreshLoop(item: PlaybackItem.Web) {
-        Log.d(TAG, "Refresh loop started. Interval: ${item.refreshIntervalMs}ms")
+        logDebug("Refresh loop started. Interval: ${item.refreshIntervalMs}ms")
 
         refreshJob = scope.launch {
             while (true) {
@@ -154,7 +162,7 @@ internal class WebStateMachine(
                 val target = inactiveSlot
                 val targetView = inactiveWebView
 
-                Log.d(TAG, "Refresh triggered: Preloading ${item.url} into ${targetView.slotName()}")
+                logDebug("Refresh triggered: Preloading ${item.url} into ${targetView.slotName()}")
                 commitDeferred = CompletableDeferred()
                 isRefreshing = true
                 targetView.post { targetView.loadUrl(item.url) }
@@ -164,7 +172,7 @@ internal class WebStateMachine(
 
                     if (pendingItem != null) break
 
-                    Log.d(TAG, "Refresh ready! Swapping instantly to slot $target.")
+                    logDebug("Refresh ready! Swapping instantly to slot $target.")
                     renderState = renderState.copy(activeSlot = target)
 
                     delay(150)
@@ -181,17 +189,8 @@ internal class WebStateMachine(
         }
     }
 
-    fun cancelPrepare() {
-        Log.d(TAG, "cancelPrepare(): Aborting pending load.")
-        transitionJob?.cancel()
-        refreshJob?.cancel()
-        commitDeferred?.cancel()
-        pendingItem = null
-        inactiveWebView.loadBlank()
-    }
-
     fun clear() {
-        Log.d(TAG, "clear(): Blanking both slots and resetting state.")
+        logDebug("clear(): Blanking both slots and resetting state.")
         transitionJob?.cancel()
         refreshJob?.cancel()
         commitDeferred?.cancel()
@@ -202,7 +201,7 @@ internal class WebStateMachine(
     }
 
     fun release() {
-        Log.d(TAG, "release(): Destroying WebViews to free memory.")
+        logDebug("release(): Destroying WebViews to free memory.")
         transitionJob?.cancel()
         refreshJob?.cancel()
         commitDeferred?.cancel()
@@ -212,21 +211,21 @@ internal class WebStateMachine(
     }
 
     private fun createWebView(slotIdentifier: String) = WebView(context).apply {
-        Log.d(TAG, "createWebView(): Instantiating $slotIdentifier")
+        logDebug("createWebView(): Instantiating $slotIdentifier")
         setBackgroundColor(android.graphics.Color.BLACK)
 
         setInitialScale(100)
 
         webViewClient = object : WebViewClient() {
             override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
-                Log.d(TAG, "${view.slotName()} redirecting to: ${request.url}")
+                logDebug("${view.slotName()} redirecting to: ${request.url}")
                 return false
             }
 
             override fun onPageCommitVisible(view: WebView, url: String) {
                 super.onPageCommitVisible(view, url)
                 if (!url.startsWith("data:text/html")) {
-                    Log.i(TAG, "onPageCommitVisible(): ${view.slotName()} has successfully painted pixels! -> $url")
+                    logDebug("onPageCommitVisible(): ${view.slotName()} has successfully painted pixels! -> $url")
                     if (view === inactiveWebView) {
                         pageCommitted = true
                         commitDeferred?.complete(Unit)

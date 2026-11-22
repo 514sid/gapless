@@ -143,46 +143,6 @@ class ImageStateMachineTest {
         assertEquals("third.jpg", machine.renderState.slotB!!.model)
     }
 
-    // cancelPrepare()
-
-    @Test
-    fun `cancelPrepare clears the inactive slot and leaves active slot unchanged`() {
-        machine.prepare(imageItem("photo.jpg"))
-        machine.cancelPrepare()
-
-        val state = machine.renderState
-        assertNull(state.slotB)
-        assertEquals(0, state.activeSlot)
-    }
-
-    @Test
-    fun `cancelPrepare after play clears the correct inactive slot`() {
-        machine.play(imageItem("first.jpg"))   // activeSlot = 1 (slotB)
-        machine.prepare(imageItem("second.jpg")) // staged in slotA (nextSlot = 0)
-        machine.cancelPrepare()
-
-        val state = machine.renderState
-        assertNull(state.slotA)
-        assertNotNull(state.slotB)
-        assertEquals(1, state.activeSlot)
-    }
-
-    @Test
-    fun `cancelPrepare when nothing is prepared is a no-op`() {
-        val before = machine.renderState
-        machine.cancelPrepare()
-        assertEquals(before, machine.renderState)
-    }
-
-    @Test
-    fun `prepare after cancelPrepare stages in the correct slot`() {
-        machine.prepare(imageItem("first.jpg"))
-        machine.cancelPrepare()
-        machine.prepare(imageItem("second.jpg"))
-
-        assertEquals("second.jpg", machine.renderState.slotB!!.model)
-    }
-
     // clear()
 
     @Test
@@ -291,33 +251,6 @@ class ImageStateMachineTest {
 
         assertEquals(3840, widthDeferred.await())
         assertEquals(2160, heightDeferred.await())
-    }
-
-    @Test
-    fun `cancelPrepare aborts the active Coil load request`() = runTest {
-        val cancellationDeferred = CompletableDeferred<Boolean>()
-        val startedDeferred = CompletableDeferred<Unit>()
-
-        machine = ImageStateMachine(
-            context = mockk(relaxed = true),
-            scope = this,
-            loadImage = { _, _, _ ->
-                try {
-                    startedDeferred.complete(Unit)
-                    awaitCancellation()
-                } catch (e: CancellationException) {
-                    cancellationDeferred.complete(true)
-                    throw e
-                }
-            }
-        )
-
-        machine.prepare(imageItem("slow_photo.jpg"))
-
-        startedDeferred.await()
-        machine.cancelPrepare()
-
-        assertTrue(cancellationDeferred.await())
     }
 
     @Test
