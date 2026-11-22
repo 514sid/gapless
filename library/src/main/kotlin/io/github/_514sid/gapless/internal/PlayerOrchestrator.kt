@@ -13,6 +13,7 @@ import io.github._514sid.gapless.internal.video.VideoEngine
 import io.github._514sid.gapless.internal.video.VideoStateMachine
 import io.github._514sid.gapless.internal.web.WebStateMachine
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.launch
 import java.util.UUID
@@ -69,6 +70,8 @@ internal class PlayerOrchestrator(
         }
     }
 
+    private val commandJob: Job
+
     var onError: ((String) -> Unit)? = null
     var onPreloadError: ((assetId: String, message: String) -> Unit)? = null
     var onPreloadMissed: ((assetId: String, elapsedMs: Long) -> Unit)? = null
@@ -80,7 +83,7 @@ internal class PlayerOrchestrator(
         web.onPreloadError = { assetId, message -> onPreloadError?.invoke(assetId, message) }
         image.onError = { assetId, message -> onPreloadError?.invoke(assetId, message) }
 
-        scope.launch {
+        commandJob = scope.launch {
             commands.collect { command ->
                 when (command) {
                     is PlayerCommand.Prepare -> prepare(command.item)
@@ -161,6 +164,8 @@ internal class PlayerOrchestrator(
     }
 
     fun release() {
+        // Stop consuming the controller's commands; a replacement orchestrator takes over.
+        commandJob.cancel()
         video.release()
         web.release()
         image.clear()
