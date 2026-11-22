@@ -26,10 +26,18 @@ internal fun buildMediaItem(item: PlaybackItem.Video): MediaItem =
         }
         .build()
 
-/** Media3 only recognizes `application/x-mpegURL` for HLS, so map the Apple alias onto it. */
+/**
+ * Media3 picks the media source by exact match on its own constants (for example
+ * `application/x-mpegURL`), so map case variants and aliases onto them.
+ */
 private fun normalizeMimeType(mimeType: String): String =
-    if (mimeType.equals("application/vnd.apple.mpegurl", ignoreCase = true)) MimeTypes.APPLICATION_M3U8
-    else mimeType
+    when (val base = mimeType.substringBefore(';').trim().lowercase()) {
+        "application/x-mpegurl", "application/vnd.apple.mpegurl" -> MimeTypes.APPLICATION_M3U8
+        "application/dash+xml" -> MimeTypes.APPLICATION_MPD
+        "application/vnd.ms-sstr+xml" -> MimeTypes.APPLICATION_SS
+        "application/x-rtsp" -> MimeTypes.APPLICATION_RTSP
+        else -> base
+    }
 
 /** Display aspect ratio of a decoded video, or null while the size is still unknown. */
 internal fun VideoSize.displayAspectRatio(): Float? =

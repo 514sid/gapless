@@ -5,16 +5,20 @@ package io.github._514sid.gapless
  *
  * @property id Unique identifier for this asset.
  * @property uri Local file path, `content://` URI, or remote URL to the media.
- * @property mimeType MIME type (e.g., "video/mp4", "image/jpeg"). Determines the rendering engine.
+ * @property mimeType MIME type (e.g., "video/mp4", "image/jpeg", "text/html"). Determines the
+ * rendering engine; see [isVideo], [isImage] and [isWeb]. Matching ignores case and parameters
+ * such as `; charset=utf-8`. Any other type is rejected by [GaplessController].
+ * @property width Width of the media in pixels, if known. For video, [width] and [height] together
+ * size the video slot until the decoder reports the real frame size; leaving them null is fine.
+ * Ignored for web assets.
+ * @property height Height of the media in pixels, if known. See [width].
  * @property refreshIntervalMs Reload interval in milliseconds for web assets. Null means no auto-refresh.
  * @property volume Playback volume for video assets, from 0.0 (silent) to 1.0 (full). Defaults to 0.0.
  * Non-video assets ignore this field.
  * @property durationMs Optional video-only clip length, in milliseconds. When set, the video is clipped
- * to this duration so ExoPlayer can begin buffering the next clip well before the transition instead of
- * only in the final [GaplessVideoConfig.maxBufferMs] window of a long clip. The host still drives the
- * transition with [GaplessController.play]; if the clip reaches this end before then, it holds on the
- * last frame (it never auto-advances). For the largest preload benefit, pair this with a
- * [GaplessVideoConfig.maxBufferMs] at least as large as the clip. VOD only; leave null for live streams.
+ * to this duration so it ends at a fixed point instead of playing its full natural length. The host still
+ * drives the transition with [GaplessController.play]; if the clip reaches this end before then, it holds
+ * on the last frame (it never auto-advances). VOD only; leave null for live streams.
  */
 data class GaplessAsset(
     val id: String,
@@ -26,53 +30,35 @@ data class GaplessAsset(
     val volume: Float = 0f,
     val durationMs: Long? = null,
 ) {
-    constructor(
-        id: Int,
-        uri: String,
-        mimeType: String,
-        width: Int? = null,
-        height: Int? = null,
-        refreshIntervalMs: Long? = null,
-        volume: Float = 0f,
-        durationMs: Long? = null,
-    ) : this(
-        id = id.toString(),
-        uri = uri,
-        mimeType = mimeType,
-        width = width,
-        height = height,
-        refreshIntervalMs = refreshIntervalMs,
-        volume = volume,
-        durationMs = durationMs,
-    )
-
-    companion object {
-        private const val MIME_PREFIX_VIDEO = "video/"
-        private const val MIME_PREFIX_IMAGE = "image/"
-        private val HLS_DASH_RTSP_MIMES = setOf(
-            "application/x-mpegURL",
+    private companion object {
+        const val MIME_PREFIX_VIDEO = "video/"
+        const val MIME_PREFIX_IMAGE = "image/"
+        val STREAMING_MIMES = setOf(
+            "application/x-mpegurl",
             "application/vnd.apple.mpegurl",
             "application/dash+xml",
             "application/vnd.ms-sstr+xml",
-            "application/x-rtsp"
+            "application/x-rtsp",
+        )
+        val WEB_MIMES = setOf(
+            "text/html",
+            "application/xhtml+xml",
         )
     }
 
-    /**
-     * Determines if the asset is a video stream or file based on its [mimeType].
-     */
+    /** [mimeType] lowercased, without parameters. */
+    private val baseMimeType: String
+        get() = mimeType.substringBefore(';').trim().lowercase()
+
+    /** True for `video/` types and HLS, DASH, SmoothStreaming and RTSP streams. */
     val isVideo: Boolean
-        get() = mimeType.startsWith(MIME_PREFIX_VIDEO) || mimeType in HLS_DASH_RTSP_MIMES
+        get() = baseMimeType.let { it.startsWith(MIME_PREFIX_VIDEO) || it in STREAMING_MIMES }
 
-    /**
-     * Determines if the asset is an image based on its [mimeType].
-     */
+    /** True for `image/` types. */
     val isImage: Boolean
-        get() = mimeType.startsWith(MIME_PREFIX_IMAGE)
+        get() = baseMimeType.startsWith(MIME_PREFIX_IMAGE)
 
-    /**
-     * Determines if the asset should be rendered as a web page (fallback if not video or image).
-     */
+    /** True for `text/html` and `application/xhtml+xml`, rendered in a WebView. */
     val isWeb: Boolean
-        get() = !isVideo && !isImage
+        get() = baseMimeType in WEB_MIMES
 }

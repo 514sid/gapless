@@ -119,7 +119,7 @@ class PlayerActivity : ComponentActivity() {
                 Surface(modifier = Modifier.fillMaxSize()) {
                     GaplessPlayer(
                         modifier = Modifier.fillMaxSize(),
-                        manager = manager,
+                        controller = manager,
                         rotation = GaplessRotation.Deg0,
                         // maxBufferMs >= the clip length so ExoPlayer can preload the next clip
                         // across the whole slot instead of only its final few seconds.

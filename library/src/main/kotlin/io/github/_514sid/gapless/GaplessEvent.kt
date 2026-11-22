@@ -13,7 +13,7 @@ sealed class GaplessEvent {
     /**
      * The asset started playing before its preload completed.
      * The transition fired on schedule to preserve sync, but content may not have been fully ready.
-     * Consider increasing [GaplessPlaylistManager.preloadMs] if this fires frequently.
+     * Consider increasing [GaplessController.preloadMs] if this fires frequently.
      */
     data class PreloadMissed(val asset: GaplessAsset, val preloadMs: Long, val elapsedMs: Long, override val timestamp: Long = System.currentTimeMillis()) : GaplessEvent()
 

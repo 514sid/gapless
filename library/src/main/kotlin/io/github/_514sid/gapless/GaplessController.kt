@@ -5,6 +5,7 @@ import io.github._514sid.gapless.internal.PlayerCommand
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -47,7 +48,18 @@ class GaplessController(
     private val commandChannel = Channel<PlayerCommand>(Channel.UNLIMITED)
     internal val commands = commandChannel.receiveAsFlow()
 
-    private val _events = MutableSharedFlow<GaplessEvent>(replay = 1, extraBufferCapacity = 16)
+    private val _events = MutableSharedFlow<GaplessEvent>(
+        replay = 1,
+        extraBufferCapacity = EVENT_BUFFER,
+        onBufferOverflow = BufferOverflow.DROP_OLDEST,
+    )
+
+    /**
+     * Playback events, for logging and error handling. Emission never blocks playback: if a
+     * collector falls more than 64 events behind, the oldest undelivered events are
+     * dropped. The last event is replayed to new collectors. Use [currentState] to track what is
+     * on screen.
+     */
     val events: SharedFlow<GaplessEvent> = _events.asSharedFlow()
 
     private val _currentState = MutableStateFlow<GaplessPlaybackState?>(null)
@@ -85,23 +97,54 @@ class GaplessController(
         }
     }
 
+    /**
+     * Begins playback with [asset]: buffers it for [preloadMs], then shows it.
+     *
+     * @throws IllegalArgumentException if [asset] fails validation (blank id or uri, unsupported
+     * mimeType, volume outside 0..1, non-positive durationMs or refreshIntervalMs).
+     */
     fun start(asset: GaplessAsset) {
         validateAsset(asset)
         intents.trySend(Intent.Start(asset))
     }
 
+    /**
+     * Starts buffering [asset] so a later [play] of it can cut immediately.
+     *
+     * @throws IllegalArgumentException if [asset] fails validation (blank id or uri, unsupported
+     * mimeType, volume outside 0..1, non-positive durationMs or refreshIntervalMs).
+     */
     fun prepareNext(asset: GaplessAsset) {
         validateAsset(asset)
         intents.trySend(Intent.PrepareNext(asset))
     }
 
+    /**
+     * Cuts to [asset]. If it was staged with [prepareNext] the cut is immediate; otherwise it is
+     * prepared first and shown once ready, or after [readyTimeoutMs].
+     *
+     * @throws IllegalArgumentException if [asset] fails validation (blank id or uri, unsupported
+     * mimeType, volume outside 0..1, non-positive durationMs or refreshIntervalMs).
+     */
     fun play(asset: GaplessAsset) {
         validateAsset(asset)
         intents.trySend(Intent.Play(asset))
     }
 
+    /** Stops playback and forgets the current and staged assets. [start] resumes. */
     fun stop() {
         intents.trySend(Intent.Stop)
+    }
+
+    /**
+     * Stops playback and shuts the controller down for good. Calls made afterwards are ignored.
+     * Cancelling [scope] has the same effect; use this when the controller should end before its
+     * scope does.
+     */
+    fun close() {
+        intents.trySend(Intent.Stop)
+        intents.close()
+        commandChannel.close()
     }
 
     internal fun onPreloadMissed(assetId: String, elapsedMs: Long) {
@@ -275,6 +318,12 @@ class GaplessController(
     private fun validateAsset(asset: GaplessAsset) {
         require(asset.id.isNotBlank()) { "Asset with uri \"${asset.uri}\" has a blank id" }
         require(asset.uri.isNotBlank()) { "Asset \"${asset.id}\" has a blank uri" }
+        require(asset.isVideo || asset.isImage || asset.isWeb) {
+            "Asset \"${asset.id}\" has unsupported mimeType \"${asset.mimeType}\""
+        }
+        require(asset.volume in 0f..1f) { "Asset \"${asset.id}\" volume ${asset.volume} is outside 0.0..1.0" }
+        asset.durationMs?.let { require(it > 0) { "Asset \"${asset.id}\" durationMs must be positive" } }
+        asset.refreshIntervalMs?.let { require(it > 0) { "Asset \"${asset.id}\" refreshIntervalMs must be positive" } }
     }
 
     private fun toPlaybackItem(g: GaplessAsset): PlaybackItem {
@@ -302,5 +351,6 @@ class GaplessController(
 
     private companion object {
         const val READY_POLL_MS = 50L
+        const val EVENT_BUFFER = 64
     }
 }

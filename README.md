@@ -67,7 +67,7 @@ class MainActivity : ComponentActivity() {
         }
 
         setContent {
-            GaplessPlayer(modifier = Modifier.fillMaxSize(), manager = manager)
+            GaplessPlayer(modifier = Modifier.fillMaxSize(), controller = manager)
         }
     }
 }
@@ -126,7 +126,7 @@ The Compose entry point. Pair it with a `GaplessPlaylistManager`.
 ```kotlin
 GaplessPlayer(
     modifier     = Modifier.fillMaxSize(),
-    manager      = manager,
+    controller   = manager,
     rotation     = GaplessRotation.Deg90,
     videoConfig  = GaplessVideoConfig(         // optional; shown with non-default values
         enableDecoderFallback               = true,
@@ -167,6 +167,11 @@ GaplessAsset(
 )
 ```
 
+`mimeType` picks the renderer: `video/*` and HLS, DASH, SmoothStreaming or RTSP stream types play in
+ExoPlayer, `image/*` in Coil, and `text/html` or `application/xhtml+xml` in a WebView. Matching ignores case
+and parameters. Any other type, an out-of-range `volume`, or a non-positive `durationMs` or `refreshIntervalMs`
+makes `start`, `prepareNext` and `play` throw `IllegalArgumentException`.
+
 **`durationMs` (video only).** Without it, a clip plays its full natural length and ExoPlayer only begins
 buffering the next clip in the final `maxBufferMs` window, so a long clip can transition with a rebuffer.
 Setting `durationMs` clips the video to that length, which lets ExoPlayer start loading the next clip far
@@ -175,7 +180,7 @@ large as the clip:
 
 ```kotlin
 GaplessPlayer(
-    manager     = manager,
+    controller  = manager,
     videoConfig = GaplessVideoConfig(maxBufferMs = 12_000), // >= the clip length
 )
 ```

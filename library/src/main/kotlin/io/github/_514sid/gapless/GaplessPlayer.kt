@@ -17,10 +17,20 @@ import io.github._514sid.gapless.internal.image.ImagePlayer
 import io.github._514sid.gapless.internal.web.WebPlayer
 import java.util.UUID
 
+/**
+ * Renders whatever [controller] is playing.
+ *
+ * The players behind it (ExoPlayer, WebView, image slots) live as long as this composable. When it
+ * leaves the composition, or when [videoConfig] or [webConfig] change and the players are rebuilt,
+ * it calls [GaplessController.stop]; call [GaplessController.start] again to resume.
+ *
+ * Use one [GaplessPlayer] per controller. Two players on the same controller would split its
+ * commands between them.
+ */
 @Composable
 fun GaplessPlayer(
+    controller: GaplessController,
     modifier: Modifier = Modifier,
-    manager: GaplessController,
     rotation: GaplessRotation = GaplessRotation.Deg0,
     videoConfig: GaplessVideoConfig = GaplessVideoConfig(),
     webConfig: GaplessWebConfig = GaplessWebConfig(),
@@ -28,23 +38,23 @@ fun GaplessPlayer(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
 
-    val orchestrator = remember(manager) {
-        PlayerOrchestrator(context, scope, manager.commands, videoConfig, webConfig).also { o ->
-            o.onError = { message -> manager.onPlaybackError(message) }
-            o.onPreloadError = { assetId, message -> manager.onPreloadError(assetId, message) }
-            o.onPreloadMissed = { assetId, elapsedMs -> manager.onPreloadMissed(assetId, elapsedMs) }
+    val orchestrator = remember(controller, context, videoConfig, webConfig) {
+        PlayerOrchestrator(context, scope, controller.commands, videoConfig, webConfig).also { o ->
+            o.onError = { message -> controller.onPlaybackError(message) }
+            o.onPreloadError = { assetId, message -> controller.onPreloadError(assetId, message) }
+            o.onPreloadMissed = { assetId, elapsedMs -> controller.onPreloadMissed(assetId, elapsedMs) }
         }
     }
 
     DisposableEffect(orchestrator) {
         val isReady: (UUID) -> Boolean = orchestrator::isReady
-        manager.isReadyProvider = isReady
+        controller.isReadyProvider = isReady
         onDispose {
             // The controller can outlive this composable (e.g. in a ViewModel); don't let it keep
             // the released orchestrator, and through it the Context and WebViews, reachable.
-            if (manager.isReadyProvider === isReady) manager.isReadyProvider = null
+            if (controller.isReadyProvider === isReady) controller.isReadyProvider = null
             orchestrator.release()
-            manager.stop()
+            controller.stop()
         }
     }
 
