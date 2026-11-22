@@ -31,9 +31,12 @@ internal class ImageStateMachine(
         if (result is ErrorResult) throw result.throwable
     }
 ) {
-    companion object {
-        private const val UHD_LONG_SIDE = 3840
-        private const val UHD_SHORT_SIDE = 2160
+    private companion object {
+        const val UHD_LONG_SIDE = 3840
+        const val UHD_SHORT_SIDE = 2160
+
+        /** One decode at a time; a new prepare cancels the previous load anyway. */
+        val loadDispatcher = Dispatchers.IO.limitedParallelism(1)
     }
 
     var renderState by mutableStateOf(ImagePlayerState())
@@ -72,7 +75,7 @@ internal class ImageStateMachine(
         val targetW = if (containerWidth > 0) containerWidth.coerceAtMost(maxW) else maxW
         val targetH = if (containerHeight > 0) containerHeight.coerceAtMost(maxH) else maxH
 
-        prepareJob = scope.launch(Dispatchers.IO.limitedParallelism(1)) {
+        prepareJob = scope.launch(loadDispatcher) {
             try {
                 loadImage(item.model, targetW, targetH)
             } catch (e: CancellationException) {
@@ -99,13 +102,6 @@ internal class ImageStateMachine(
         }
 
         renderState = renderState.copy(activeSlot = target)
-        pendingItem = null
-    }
-
-    fun cancelPrepare() {
-        prepareJob?.cancel()
-        prepareJob = null
-        renderState = renderState.setSlot(slot = inactiveSlot, value = null)
         pendingItem = null
     }
 

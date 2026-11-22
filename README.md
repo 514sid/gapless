@@ -48,7 +48,7 @@ class MainActivity : ComponentActivity() {
 
         var index = 0
         var timerJob: Job? = null
-        val manager = GaplessPlaylistManager(scope = lifecycleScope)
+        val manager = GaplessController(scope = lifecycleScope)
         manager.start(assets[index++].spec)
 
         lifecycleScope.launch {
@@ -77,12 +77,12 @@ class MainActivity : ComponentActivity() {
 
 ## API
 
-### `GaplessPlaylistManager`
+### `GaplessController`
 
-Owns the playback loop. Create it once, call `start` with a callback that returns the next asset to play.
+Owns the playback state. Create it once; the host decides what plays next and when.
 
 ```kotlin
-val manager = GaplessPlaylistManager(
+val manager = GaplessController(
     scope     = lifecycleScope, // cancelled automatically with the scope
     preloadMs = 3_000,          // how early to buffer the next asset
 )
@@ -113,7 +113,8 @@ lifecycleScope.launch {
 | `start(asset)` | Begin playback with the given asset. |
 | `prepareNext(asset)` | Start buffering the next asset. Call this early — as soon as `Started` fires — so it is ready when `play` is called. |
 | `play(asset)` | Transition to the asset. If already preloading, transitions immediately. If not, prepares it first and plays as soon as the renderer is ready. |
-| `stop()` | Cancel all coroutines and halt playback. |
+| `stop()` | Halt playback and forget the current and staged assets. `start` resumes. |
+| `close()` | Stop and shut the controller down for good. |
 | `events: SharedFlow<GaplessEvent>` | Stream of playback events (collect in a coroutine). |
 | `currentState: StateFlow<GaplessPlaybackState?>` | Currently-playing asset, playback ID, and start timestamp. |
 
@@ -121,7 +122,7 @@ lifecycleScope.launch {
 
 ### `GaplessPlayer`
 
-The Compose entry point. Pair it with a `GaplessPlaylistManager`.
+The Compose entry point. Pair it with a `GaplessController`.
 
 ```kotlin
 GaplessPlayer(
@@ -285,7 +286,7 @@ app process                           :player process
 +-----------------------------------------+    +------------------------------+
 |  MainActivity (thin launcher)           |    |  PlayerActivity              |
 |                                         |    |  GaplessPlayer composable    |
-|  WatchdogService (foreground) --- bind -+----+  GaplessPlaylistManager      |
+|  WatchdogService (foreground) --- bind -+----+  GaplessController           |
 |  detects crash, restarts player         |    |                              |
 +-----------------------------------------+    |  PlayerService               |
                                                |  (keepalive stub)            |

@@ -60,7 +60,7 @@ Wire it up — buffer next and schedule transition on each `Started` event:
 
 ```kotlin
 class PlayerViewModel : ViewModel() {
-    val manager = GaplessPlaylistManager(scope = viewModelScope)
+    val manager = GaplessController(scope = viewModelScope)
 
     init {
         val indices = mutableMapOf<String, Int>()
