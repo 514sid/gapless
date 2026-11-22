@@ -24,6 +24,7 @@ import androidx.media3.exoplayer.ExoPlayer
 import io.github._514sid.gapless.GaplessVideoConfig
 import io.github._514sid.gapless.internal.PlaybackItem
 import java.util.UUID
+import java.util.concurrent.atomic.AtomicBoolean
 
 /**
  * A/B video engine backed by two [ExoPlayer]s, one per slot. The next clip is staged and rendered
@@ -48,7 +49,7 @@ internal class DualVideoStateMachine(
     private val config: GaplessVideoConfig = GaplessVideoConfig(),
     /** Creates each slot's player; tests substitute a scripted one. */
     private val createExoPlayer: (Context, GaplessVideoConfig) -> ExoPlayer = ::defaultExoPlayer,
-) : VideoEngine {
+) {
 
     private val handler = Handler(Looper.getMainLooper())
 
@@ -68,8 +69,8 @@ internal class DualVideoStateMachine(
     )
         private set
 
-    override var onErrorCallback: ((String) -> Unit)? = null
-    override var onPreloadErrorCallback: ((assetId: String, message: String) -> Unit)? = null
+    var onErrorCallback: ((String) -> Unit)? = null
+    var onPreloadErrorCallback: ((assetId: String, message: String) -> Unit)? = null
 
     /** The item loaded in each slot, or null when the slot is empty. */
     private val items = arrayOfNulls<PlaybackItem.Video>(2)
@@ -180,10 +181,26 @@ internal class DualVideoStateMachine(
         }
     }
 
-    override val isNextReady: Boolean
+    val isNextReady: Boolean
         get() = ready(inactiveSlot)
 
-    override fun prepare(item: PlaybackItem.Video) {
+    /**
+     * The clip passed to [play] has started moving on screen. startedAt is the wall-clock time its
+     * position was zero. With audio on this can be a few hundred milliseconds after [play], while
+     * the audio output starts.
+     */
+    var onStartedCallback: ((playbackId: UUID, startedAt: Long) -> Unit)? = null
+
+    /** The clip passed to [play] whose start hasn't been reported yet. */
+    private var awaitingStart: UUID? = null
+
+    /**
+     * Per slot: report the next frame the player releases. Set on the main thread by [play], read
+     * and cleared on the playback thread, which is where frames are released.
+     */
+    private val watchFrames = arrayOf(AtomicBoolean(false), AtomicBoolean(false))
+
+    fun prepare(item: PlaybackItem.Video) {
         load(inactiveSlot, item)
     }
 
@@ -217,7 +234,7 @@ internal class DualVideoStateMachine(
         p.prepare()
     }
 
-    override fun play(item: PlaybackItem.Video) {
+    fun play(item: PlaybackItem.Video) {
         val target = inactiveSlot
         val old = currentSlot
 
@@ -226,6 +243,10 @@ internal class DualVideoStateMachine(
         val p = players[target]
         p.volume = item.volume
         p.playWhenReady = true
+        // A staged clip already shows its first frame, paused; it starts once the clock runs,
+        // which with audio waits for the audio output. The next frame released marks that.
+        awaitingStart = item.playbackId
+        watchFrames[target].set(true)
         currentSlot = target
         resetWatchdog()
         startWatchdog()
@@ -248,6 +269,15 @@ internal class DualVideoStateMachine(
         pendingFlip = -1
         renderState = renderState.copy(activeSlot = target)
         clearSlot(old, keepFrame = false)
+    }
+
+    /** Main thread: the first frame since [play] was released on [slot]. */
+    private fun onFrameReleased(slot: Int) {
+        val id = items[slot]?.playbackId ?: return
+        if (id != awaitingStart || slot != currentSlot) return
+        awaitingStart = null
+        val position = players[slot].currentPosition.coerceAtLeast(0L)
+        onStartedCallback?.invoke(id, System.currentTimeMillis() - position)
     }
 
     private fun onFirstFrame(slot: Int) {
@@ -276,6 +306,7 @@ internal class DualVideoStateMachine(
         items[slot] = null
         deferred[slot] = false
         retryCount[slot] = 0
+        watchFrames[slot].set(false)
         if (pendingFlip == slot) pendingFlip = -1
         val p = players[slot]
         p.stop()
@@ -493,11 +524,12 @@ internal class DualVideoStateMachine(
         }
     }
 
-    override fun clear() {
+    fun clear() {
         clearSlot(0, keepFrame = false)
         clearSlot(1, keepFrame = false)
         currentSlot = 0
         pendingFlip = -1
+        awaitingStart = null
         if (trialPlaybackId != null) endTrial("playback was cleared")
         reclaimStreak = 0
         reclaimedSinceCut = false
@@ -506,7 +538,7 @@ internal class DualVideoStateMachine(
         renderState = renderState.copy(activeSlot = 0)
     }
 
-    override fun release() {
+    fun release() {
         released = true
         handler.removeCallbacksAndMessages(null)
         clear()
@@ -517,7 +549,7 @@ internal class DualVideoStateMachine(
     }
 
     @Composable
-    override fun Content(modifier: Modifier) {
+    fun Content(modifier: Modifier) {
         DualVideoPlayer(state = renderState, modifier = modifier)
     }
 
@@ -534,6 +566,10 @@ internal class DualVideoStateMachine(
             .apply {
                 videoScalingMode = C.VIDEO_SCALING_MODE_SCALE_TO_FIT
                 repeatMode = Player.REPEAT_MODE_OFF
+                // Runs on the playback thread for every frame; only a watched slot posts anything.
+                setVideoFrameMetadataListener { _, _, _, _ ->
+                    if (watchFrames[slot].compareAndSet(true, false)) handler.post { onFrameReleased(slot) }
+                }
                 addListener(object : Player.Listener {
                     override fun onRenderedFirstFrame() = onFirstFrame(slot)
                     // TextureView stretches frames to its bounds, so the slot has to carry the real ratio.

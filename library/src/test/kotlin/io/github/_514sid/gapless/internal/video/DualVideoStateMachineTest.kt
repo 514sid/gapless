@@ -2,6 +2,7 @@ package io.github._514sid.gapless.internal.video
 
 import android.net.Uri
 import android.os.Looper
+import androidx.media3.common.Format
 import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
@@ -10,6 +11,7 @@ import androidx.media3.common.VideoSize
 import androidx.media3.datasource.DataSpec
 import androidx.media3.datasource.HttpDataSource
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.video.VideoFrameMetadataListener
 import androidx.test.core.app.ApplicationProvider
 import io.github._514sid.gapless.GaplessVideoConfig
 import io.github._514sid.gapless.internal.PlaybackItem
@@ -39,6 +41,7 @@ class DualVideoStateMachineTest {
     private val fakes = mutableListOf<FakePlayer>()
     private val errors = mutableListOf<String>()
     private val preloadErrors = mutableListOf<String>()
+    private val starts = mutableListOf<Pair<java.util.UUID, Long>>()
     private lateinit var engine: DualVideoStateMachine
 
     private fun start(config: GaplessVideoConfig = GaplessVideoConfig()) {
@@ -47,6 +50,7 @@ class DualVideoStateMachineTest {
         }
         engine.onErrorCallback = { errors += it }
         engine.onPreloadErrorCallback = { assetId, _ -> preloadErrors += assetId }
+        engine.onStartedCallback = { id, startedAt -> starts += id to startedAt }
     }
 
     @After
@@ -404,6 +408,54 @@ class DualVideoStateMachineTest {
         }
     }
 
+    // --- Reporting the start ---
+
+    @Test
+    fun `a clip's start is reported at the first frame after play, backdated by its position`() {
+        start()
+        val a = video("a")
+        engine.prepare(a)
+        val pa = playerOf(a)
+        pa.firstFrame()
+        pa.releaseFrame() // The paused first frame of the preload doesn't count.
+        idle(10)
+        engine.play(a)
+        idle(10)
+        assertTrue("nothing moves until the clock runs", starts.isEmpty())
+
+        pa.position = 40
+        val before = System.currentTimeMillis()
+        pa.releaseFrame()
+        pa.releaseFrame()
+        idle(10)
+        assertEquals(1, starts.size)
+        assertEquals(a.playbackId, starts.single().first)
+        assertTrue(starts.single().second in (before - 40 - 50)..(before - 40 + 50))
+    }
+
+    @Test
+    fun `a frame from the outgoing slot doesn't report the incoming clip`() {
+        start()
+        val a = video("a")
+        playFirst(a)
+        val pa = playerOf(a)
+        pa.releaseFrame()
+        idle(10)
+        starts.clear()
+
+        val b = video("b")
+        engine.prepare(b)
+        playerOf(b).firstFrame()
+        engine.play(b)
+        pa.releaseFrame()
+        idle(10)
+        assertTrue(starts.isEmpty())
+
+        playerOf(b).releaseFrame()
+        idle(10)
+        assertEquals(listOf(b.playbackId), starts.map { it.first })
+    }
+
     private fun playFirst(item: PlaybackItem.Video) {
         engine.prepare(item)
         playerOf(item).firstFrame()
@@ -430,6 +482,7 @@ class DualVideoStateMachineTest {
     private class FakePlayer {
         val mock: ExoPlayer = mockk(relaxed = true)
         lateinit var listener: Player.Listener
+        var frameListener: VideoFrameMetadataListener? = null
         var prepares = 0
         var preparesSinceMedia = 0
         var stops = 0
@@ -446,6 +499,7 @@ class DualVideoStateMachineTest {
 
         init {
             every { mock.addListener(any()) } answers { listener = firstArg() }
+            every { mock.setVideoFrameMetadataListener(any()) } answers { frameListener = firstArg() }
             every { mock.prepare() } answers {
                 prepares++
                 preparesSinceMedia++
@@ -480,6 +534,10 @@ class DualVideoStateMachineTest {
         }
 
         fun firstFrame() = listener.onRenderedFirstFrame()
+
+        /** The playback thread releasing a frame for display. */
+        fun releaseFrame() =
+            frameListener?.onVideoFrameAboutToBeRendered(0L, System.nanoTime(), Format.Builder().build(), null)
 
         fun error(code: Int) = fire(PlaybackException("error $code", null, code))
 

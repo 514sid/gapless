@@ -356,6 +356,34 @@ class ImageStateMachineTest {
         assertEquals(1080 to 1920, size.await())
     }
 
+    // Reporting the image shown
+
+    @Test
+    fun `a cut to a decoded image reports it shown at once`() {
+        val shown = mutableListOf<java.util.UUID>()
+        machine.onShown = { shown += it }
+        val item = imageItem("photo.jpg")
+        machine.prepare(item)
+        machine.onDisplayed(machine.renderState.slotB!!) // decoded while still hidden
+        assertTrue(shown.isEmpty())
+
+        machine.play(item)
+        assertEquals(listOf(item.playbackId), shown)
+    }
+
+    @Test
+    fun `a cut to an image still decoding reports it once it decodes`() {
+        val shown = mutableListOf<java.util.UUID>()
+        machine.onShown = { shown += it }
+        val item = imageItem("photo.jpg")
+        machine.play(item)
+        assertTrue(shown.isEmpty())
+
+        machine.onDisplayed(machine.renderState.slotB!!)
+        machine.onDisplayed(machine.renderState.slotB!!)
+        assertEquals(listOf(item.playbackId), shown)
+    }
+
     // Failures of the slot's own decode
 
     @Test

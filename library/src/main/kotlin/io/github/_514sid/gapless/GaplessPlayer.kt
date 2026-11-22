@@ -43,6 +43,7 @@ public fun GaplessPlayer(
             o.onError = { message -> controller.onPlaybackError(message) }
             o.onPreloadError = { assetId, message -> controller.onPreloadError(assetId, message) }
             o.onPreloadMissed = { assetId, elapsedMs -> controller.onPreloadMissed(assetId, elapsedMs) }
+            o.onShown = { playbackId, startedAt -> controller.onShown(playbackId, startedAt) }
         }
     }
 
@@ -77,6 +78,7 @@ public fun GaplessPlayer(
                         .fillMaxSize()
                         .graphicsLayer { alpha = if (active == ActiveContent.IMAGE) 1f else 0f },
                     onDisplayError = orchestrator.image::onDisplayError,
+                    onDisplayed = orchestrator.image::onDisplayed,
                 )
 
                 WebPlayer(

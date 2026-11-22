@@ -76,6 +76,7 @@ public class GaplessController(
         data class PreloadMissed(val assetId: String, val elapsedMs: Long) : Intent
         data class PreloadError(val assetId: String, val message: String) : Intent
         data class PlaybackError(val message: String) : Intent
+        data class Shown(val playbackId: UUID, val startedAt: Long?) : Intent
     }
 
     private val intents = Channel<Intent>(Channel.UNLIMITED)
@@ -89,6 +90,13 @@ public class GaplessController(
 
     private var transitionJob: Job? = null
     private var generation: Long = 0L
+
+    // What the player last reported on screen, which is what Ended refers to. The current item
+    // may not be on screen yet: it waits in pendingShow until the player reports it.
+    private var shownAsset: GaplessAsset? = null
+    private var shownItem: PlaybackItem? = null
+    private var pendingShow: PlaybackItem? = null
+    private var showTimeoutJob: Job? = null
 
     init {
         scope.launch {
@@ -122,8 +130,9 @@ public class GaplessController(
      * Cuts to [asset]. If it was staged with [prepareNext] the cut is immediate; otherwise it is
      * prepared first and shown once ready, or after [readyTimeoutMs].
      *
-     * Unless a later call supersedes it, this ends in [GaplessEvent.Started] for [asset], or in
-     * [GaplessEvent.PreloadError] if it fails to load, in which case nothing changes on screen.
+     * Unless a later call supersedes it, this ends in [GaplessEvent.Started] for [asset] once it is
+     * on screen, in [GaplessEvent.PreloadError] if it fails to load, in which case nothing changes
+     * on screen, or in [GaplessEvent.PlaybackError] if it fails after the cut but before it shows.
      *
      * @throws IllegalArgumentException if [asset] fails validation (blank id or uri, unsupported
      * mimeType, volume outside 0..1, non-positive durationMs or refreshIntervalMs).
@@ -161,6 +170,14 @@ public class GaplessController(
         intents.trySend(Intent.PlaybackError(message))
     }
 
+    /**
+     * The player has put the item with [playbackId] on screen and its timeline is running.
+     * [startedAt] is the wall-clock time its position was zero, or null for now.
+     */
+    internal fun onShown(playbackId: UUID, startedAt: Long?) {
+        intents.trySend(Intent.Shown(playbackId, startedAt))
+    }
+
     private suspend fun handle(intent: Intent) {
         when (intent) {
             is Intent.Start -> handleStart(intent.asset)
@@ -177,6 +194,7 @@ public class GaplessController(
             }
             is Intent.PreloadError -> handlePreloadError(intent.assetId, intent.message)
             is Intent.PlaybackError -> handlePlaybackError(intent.message)
+            is Intent.Shown -> handleShown(intent.playbackId, intent.startedAt)
         }
     }
 
@@ -187,7 +205,7 @@ public class GaplessController(
         val item = toPlaybackItem(asset).also { it.preparedAt = System.currentTimeMillis() }
         preparedAsset = asset
         preparedItem = item
-        // Seed "current" so the very first transition does not emit a spurious Ended.
+        // Seed "current" so a PreloadError for the first asset is reported against it.
         currentAsset = asset
         currentItem = item
 
@@ -272,6 +290,7 @@ public class GaplessController(
         generation++
         transitionJob?.cancel()
         transitionJob = null
+        clearShown()
         currentAsset = null
         currentItem = null
         preparedAsset = null
@@ -285,30 +304,66 @@ public class GaplessController(
         generation++
         transitionJob?.cancel()
         transitionJob = null
+        // Failed before it was shown: what was on screen until now has still ended.
+        if (pendingShow === item) endShown(except = item)
+        clearShown()
         _events.tryEmit(GaplessEvent.PlaybackError(asset, item.playbackId, message))
         currentAsset = null
         currentItem = null
         _currentState.value = null
     }
 
-    /** Emits the Play command and advances bookkeeping/events. Always runs on the intent coroutine. */
+    /**
+     * Emits the Play command and advances bookkeeping. Started (and Ended for what was on screen)
+     * follow once the player reports the item shown, or after [readyTimeoutMs] if it never does.
+     * Always runs on the intent coroutine.
+     */
     private fun commitPlay(asset: GaplessAsset, item: PlaybackItem) {
         commandChannel.trySend(PlayerCommand.Play(item))
 
-        val prevAsset = currentAsset
-        val prevItem = currentItem
-        if (prevAsset != null && prevItem != null && prevItem.playbackId != item.playbackId) {
-            _events.tryEmit(GaplessEvent.Ended(prevAsset, prevItem.playbackId))
-        }
-
-        item.startedAt = System.currentTimeMillis()
         currentAsset = asset
         currentItem = item
         preparedAsset = null
         preparedItem = null
 
+        pendingShow = item
+        showTimeoutJob?.cancel()
+        showTimeoutJob = scope.launch {
+            delay(readyTimeoutMs)
+            if (isActive) intents.trySend(Intent.Shown(item.playbackId, null)) // no-op once closed
+        }
+    }
+
+    private fun handleShown(playbackId: UUID, startedAt: Long?) {
+        val item = pendingShow?.takeIf { it.playbackId == playbackId } ?: return
+        val asset = currentAsset?.takeIf { currentItem === item } ?: return
+        pendingShow = null
+        showTimeoutJob?.cancel()
+        showTimeoutJob = null
+
+        endShown(except = item)
+        item.startedAt = startedAt ?: System.currentTimeMillis()
+        shownAsset = asset
+        shownItem = item
         _currentState.value = GaplessPlaybackState(asset, item.playbackId, item.startedAt)
-        _events.tryEmit(GaplessEvent.Started(asset, item.playbackId))
+        _events.tryEmit(GaplessEvent.Started(asset, item.playbackId, item.startedAt))
+    }
+
+    /** Emits Ended for what is on screen, unless it is [except]. */
+    private fun endShown(except: PlaybackItem) {
+        val asset = shownAsset ?: return
+        val item = shownItem ?: return
+        if (item.playbackId != except.playbackId) {
+            _events.tryEmit(GaplessEvent.Ended(asset, item.playbackId))
+        }
+    }
+
+    private fun clearShown() {
+        shownAsset = null
+        shownItem = null
+        pendingShow = null
+        showTimeoutJob?.cancel()
+        showTimeoutJob = null
     }
 
     private fun assetForId(assetId: String): GaplessAsset? = when (assetId) {

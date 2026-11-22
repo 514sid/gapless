@@ -5,7 +5,22 @@ import java.util.UUID
 public sealed class GaplessEvent {
     public abstract val timestamp: Long
 
+    /**
+     * The asset is on screen. For a video this is when its frames start moving, which with audio on
+     * can be a few hundred milliseconds after the cut, while the audio output starts; [timestamp]
+     * is the wall-clock time the clip's position was zero. For an image it is when the image has
+     * decoded, and for a web page when the painted page is swapped in. If the player can't confirm
+     * it within [GaplessController.readyTimeoutMs] of the cut, this is emitted anyway.
+     *
+     * Time a slot from [timestamp], not from when the event arrives or when [GaplessController.play]
+     * was called, so a slow start doesn't cut the end off the clip.
+     */
     public data class Started(val asset: GaplessAsset, val playbackId: UUID, override val timestamp: Long = System.currentTimeMillis()) : GaplessEvent()
+
+    /**
+     * The asset was replaced on screen. Emitted just before the [Started] of what replaced it. An
+     * asset cut away from before it was ever shown gets neither event.
+     */
     public data class Ended(val asset: GaplessAsset, val playbackId: UUID, override val timestamp: Long = System.currentTimeMillis()) : GaplessEvent()
     /**
      * The asset on screen failed and the player gave up on it. Transient video failures (network,
