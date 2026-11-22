@@ -169,6 +169,9 @@ internal class ImageStateMachine(
     }
 
     fun onDisplayError(slot: ImageSlotState, message: String) {
+        // A slot still waiting for its preload has no image yet, and Coil reports that empty
+        // request as an error. Nothing was decoded, so nothing failed.
+        if (!slot.loaded) return
         val playbackId = slot.playbackId ?: return
         val active = if (renderState.activeSlot == 0) renderState.slotA else renderState.slotB
         val pending = pendingItem

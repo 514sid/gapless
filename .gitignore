@@ -39,3 +39,6 @@ secrets.properties
 .claude
 # Python venv for samples/generate.py
 .venv/
+
+# Output of samples/soak/soak.sh
+soak-*/

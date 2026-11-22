@@ -135,7 +135,7 @@ GaplessPlayer(
     controller   = manager,
     rotation     = GaplessRotation.Deg90,
     videoConfig  = GaplessVideoConfig(         // optional; shown with non-default values
-        enableDecoderFallback               = false,
+        enableDecoderFallback               = true,
         stallTimeoutMs                      = 30_000,
         minBufferMs                         = 2_000,
         maxBufferMs                         = 8_000,
@@ -245,10 +245,11 @@ Video failures are retried inside the player before you hear about them:
 - A clip that stops advancing for `stallTimeoutMs` (15 seconds by default) is restarted.
 - Each video player buffers at most `targetBufferBytes` (32 MB by default), whatever the buffer durations
   allow. There are two players, so video buffers take at most about twice that.
-- `enableDecoderFallback` is on by default, so a hardware decoder that won't open falls back to another
-  decoder, usually a software one. Turn it off to keep every clip on the hardware decoder: a second decoder
-  that won't open then means hard cuts (below) rather than software decoding, which can stutter on weak
-  CPUs.
+- `enableDecoderFallback` is off by default, so a hardware decoder that won't open is not replaced by a
+  software one. It usually won't open because the device's decoders are all in use, and decoding on the CPU
+  instead stutters on TV-class hardware. A second decoder that won't open means hard cuts (below), and a clip
+  that gets no decoder at all is retried and then reported. Turn it on to let a software decoder take over
+  instead. Formats that only a software decoder supports play in software either way.
 - Muted clips (`volume = 0`) don't select an audio track at all, so they need no audio decoder and an audio
   output failure can't stop them.
 - Some devices can't run two hardware decoders at once, which seamless cuts need. When the second decoder fails to open, the player switches to hard cuts: the old clip

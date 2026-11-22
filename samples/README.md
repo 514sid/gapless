@@ -31,8 +31,8 @@ adb shell am start -S -n io.github.gapless.sample/.MainActivity --es playlist co
 - `--ez clock true` shows the device clock overlay.
 - `--es ids a,b,c` plays just those assets, in that order, instead of a playlist.
 - `--ei rotation 90` rotates the players clockwise (`90`, `180` or `270`), for a screen mounted on its side. With two players and `90` or `270`, they still sit side by side as the viewer sees them.
-- `--ez fallback false` turns off `GaplessVideoConfig.enableDecoderFallback`, so a decoder that can't open fails instead of falling back to a software one.
-- `--ei players 2` shows two players side by side, each with its own controller and schedule. The right one plays the same list shifted by one clip and is muted; `--es playlist2 <name>` or `--es ids2 a,b,c` give it its own list and `--ef volume2 1` unmutes it. Each player holds two decoders, so two players need four. On a TV with two hardware decoders the rest fall back to software decoding, which is why `split_720p` exists.
+- `--ez fallback true` turns on `GaplessVideoConfig.enableDecoderFallback` (off by default), so a decoder that can't open falls back to a software one instead of failing.
+- `--ei players 2` shows two players side by side, each with its own controller and schedule. The right one plays the same list shifted by one clip and is muted; `--es playlist2 <name>` or `--es ids2 a,b,c` give it its own list and `--ef volume2 1` unmutes it. Each player holds two decoders, so two players need four. On a TV with two hardware decoders, each player then switches to hard cuts, or with `--ez fallback true` the rest decode in software, which is why `split_720p` exists.
 - `--ez uhd false` leaves out videos larger than 1920x1080 (the two 4K clips), for devices that only decode Full HD. `--ez uhd true` keeps them. Without the extra, the app keeps them only if the display has a mode above 1920x1080. Images and broken assets are never left out, so `broken_hevc_4320p` still tests a clip the decoder can't take.
 
 With no extra, the app plays `mixed`. The playlist in use, and whether 4K is on, is logged under the `GaplessPlayer` tag.
@@ -47,6 +47,7 @@ With no extra, the app plays `mixed`. The playlist in use, and whether 4K is on,
 | `mixed` | Video, image and web page in turn, including the 8000x6000 JPEG and the transparent PNG |
 | `portrait` | A 1080x1920 clip and image |
 | `split_720p` | H.264, HEVC and VP9 at 720p, for two players side by side (`--ei players 2`) |
+| `soak` | A two-minute loop of every working codec, frame rate and image type, the web page, short clips back to back and three broken assets, for long runs |
 | `all` | Every working asset |
 | `broken` | Each broken asset followed by `h264_1080p30`, so you see the player recover |
 | `broken_only` | Only the broken assets |
@@ -107,6 +108,28 @@ Each of these should end in a `PlaybackError` or `PreloadError` (or, for some, p
 | `broken_video_as_image` | An MP4 with an `image/jpeg` MIME type |
 | `broken_missing_web` | A page that isn't in the APK |
 | `broken_unreachable_web` | `https://unreachable.invalid/`, a host that never resolves |
+
+## Soak test
+
+`soak/soak.sh` plays the `soak` playlist on a device for hours and records how it holds up:
+
+```sh
+samples/soak/soak.sh 24 300
+```
+
+The arguments are the length in hours (24 by default) and the seconds between samples (300). It keeps the computer awake with `caffeinate` and writes into `soak-<date>/` in the current directory:
+
+- `logcat.txt`: the player's logs, reconnecting if adb drops.
+- `samples.csv`: every interval, the device's uptime, the player's process id, its memory (total, Java, native, graphics), threads, open files and CPU time, system free memory and swap, load, and the codec processes' memory.
+- `events.txt`: start, end, and anything the script did, such as relaunching the app after the player was gone for two samples.
+
+When the run ends it writes `summary.md` with `soak/report.py`, which you can also run on a run in progress:
+
+```sh
+python3 samples/soak/report.py soak-20261122-2114
+```
+
+The summary covers reboots, restarts, crashes, ANRs and low-memory kills, starts and errors per asset (flagging errors on working assets), the hold at each video cut, and the first, last, highest and hourly trend of every resource. Set `ANDROID_SERIAL` to pick the device and `SOAK_EXTRAS` for launch extras, for example `SOAK_EXTRAS="--ef volume 1"`. The computer has to stay on and on the device's network for the whole run.
 
 ## Regenerating
 

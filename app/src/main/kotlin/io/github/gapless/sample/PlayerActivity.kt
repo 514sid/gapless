@@ -106,7 +106,7 @@ class PlayerActivity : ComponentActivity() {
         Log.d(
             TAG,
             "Players: $players (uhd=$allowUhd, rotation=${intent.getIntExtra(EXTRA_ROTATION, 0)}, " +
-                "fallback=${intent.getBooleanExtra(EXTRA_FALLBACK, true)})",
+                "fallback=${intent.getBooleanExtra(EXTRA_FALLBACK, false)})",
         )
         runners.forEach { it.start() }
 
@@ -120,8 +120,8 @@ class PlayerActivity : ComponentActivity() {
         val sideways = rotation == GaplessRotation.Deg90 || rotation == GaplessRotation.Deg270
 
         val videoConfig = GaplessVideoConfig(
-            // false: a decoder that can't open fails instead of falling back to a software one.
-            enableDecoderFallback = intent.getBooleanExtra(EXTRA_FALLBACK, true),
+            // true: a decoder that can't open falls back to a software one instead of failing.
+            enableDecoderFallback = intent.getBooleanExtra(EXTRA_FALLBACK, false),
             // maxBufferMs >= the clip length so ExoPlayer can preload the next clip across the
             // whole slot instead of only its final few seconds.
             minBufferMs = 2_000,
