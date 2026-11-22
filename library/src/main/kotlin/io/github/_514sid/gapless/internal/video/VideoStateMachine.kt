@@ -178,7 +178,7 @@ internal class VideoStateMachine(context: Context, config: GaplessVideoConfig = 
     /**
      * A copy of the frame on screen to cover the cut, or null if there's no memory for one. It is
      * only up for a few frames, so it is taken at half size: a full-size copy of a 4K view is a
-     * 33 MB heap allocation on every cut.
+     * 33 MB native allocation and GPU readback on every cut.
      */
     private fun captureFrame(): Bitmap? {
         val view = textureViewRef ?: return null
