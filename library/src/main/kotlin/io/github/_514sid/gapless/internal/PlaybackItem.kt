@@ -1,6 +1,5 @@
 package io.github._514sid.gapless.internal
 
-import android.net.Uri
 import java.util.UUID
 
 internal sealed class PlaybackItem {
@@ -14,7 +13,7 @@ internal sealed class PlaybackItem {
      * slot before the decoder reports the real video size. Null when the asset declared no size.
      */
     data class Video(
-        val uri: Uri,
+        val uri: String,
         val mimeType: String,
         val aspectRatioHint: Float? = null,
         val volume: Float = 0f,

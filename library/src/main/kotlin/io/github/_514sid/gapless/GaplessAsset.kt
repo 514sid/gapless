@@ -20,7 +20,7 @@ package io.github._514sid.gapless
  * drives the transition with [GaplessController.play]; if the clip reaches this end before then, it holds
  * on the last frame (it never auto-advances). VOD only; leave null for live streams.
  */
-data class GaplessAsset(
+public data class GaplessAsset(
     val id: String,
     val uri: String,
     val mimeType: String,
@@ -51,14 +51,14 @@ data class GaplessAsset(
         get() = mimeType.substringBefore(';').trim().lowercase()
 
     /** True for `video/` types and HLS, DASH, SmoothStreaming and RTSP streams. */
-    val isVideo: Boolean
+    public val isVideo: Boolean
         get() = baseMimeType.let { it.startsWith(MIME_PREFIX_VIDEO) || it in STREAMING_MIMES }
 
     /** True for `image/` types. */
-    val isImage: Boolean
+    public val isImage: Boolean
         get() = baseMimeType.startsWith(MIME_PREFIX_IMAGE)
 
     /** True for `text/html` and `application/xhtml+xml`, rendered in a WebView. */
-    val isWeb: Boolean
+    public val isWeb: Boolean
         get() = baseMimeType in WEB_MIMES
 }

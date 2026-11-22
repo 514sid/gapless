@@ -20,7 +20,6 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import java.util.UUID
-import android.net.Uri
 
 /**
  * Drives playback: the host prepares the next asset, then asks to play it on its own schedule.
@@ -40,10 +39,10 @@ import android.net.Uri
  * [prepareNext] to become ready. When it runs out the cut happens anyway and
  * [GaplessEvent.PreloadMissed] is emitted.
  */
-class GaplessController(
+public class GaplessController(
     private val scope: CoroutineScope,
-    val preloadMs: Long = 2_000L,
-    val readyTimeoutMs: Long = 10_000L,
+    public val preloadMs: Long = 2_000L,
+    public val readyTimeoutMs: Long = 10_000L,
 ) {
     private val commandChannel = Channel<PlayerCommand>(Channel.UNLIMITED)
     internal val commands = commandChannel.receiveAsFlow()
@@ -60,10 +59,10 @@ class GaplessController(
      * dropped. The last event is replayed to new collectors. Use [currentState] to track what is
      * on screen.
      */
-    val events: SharedFlow<GaplessEvent> = _events.asSharedFlow()
+    public val events: SharedFlow<GaplessEvent> = _events.asSharedFlow()
 
     private val _currentState = MutableStateFlow<GaplessPlaybackState?>(null)
-    val currentState: StateFlow<GaplessPlaybackState?> = _currentState.asStateFlow()
+    public val currentState: StateFlow<GaplessPlaybackState?> = _currentState.asStateFlow()
 
     /** Set by [GaplessPlayer]: whether the item with the given playback id can render. Main thread only. */
     internal var isReadyProvider: ((UUID) -> Boolean)? = null
@@ -103,7 +102,7 @@ class GaplessController(
      * @throws IllegalArgumentException if [asset] fails validation (blank id or uri, unsupported
      * mimeType, volume outside 0..1, non-positive durationMs or refreshIntervalMs).
      */
-    fun start(asset: GaplessAsset) {
+    public fun start(asset: GaplessAsset) {
         validateAsset(asset)
         intents.trySend(Intent.Start(asset))
     }
@@ -114,7 +113,7 @@ class GaplessController(
      * @throws IllegalArgumentException if [asset] fails validation (blank id or uri, unsupported
      * mimeType, volume outside 0..1, non-positive durationMs or refreshIntervalMs).
      */
-    fun prepareNext(asset: GaplessAsset) {
+    public fun prepareNext(asset: GaplessAsset) {
         validateAsset(asset)
         intents.trySend(Intent.PrepareNext(asset))
     }
@@ -126,13 +125,13 @@ class GaplessController(
      * @throws IllegalArgumentException if [asset] fails validation (blank id or uri, unsupported
      * mimeType, volume outside 0..1, non-positive durationMs or refreshIntervalMs).
      */
-    fun play(asset: GaplessAsset) {
+    public fun play(asset: GaplessAsset) {
         validateAsset(asset)
         intents.trySend(Intent.Play(asset))
     }
 
     /** Stops playback and forgets the current and staged assets. [start] resumes. */
-    fun stop() {
+    public fun stop() {
         intents.trySend(Intent.Stop)
     }
 
@@ -141,7 +140,7 @@ class GaplessController(
      * Cancelling [scope] has the same effect; use this when the controller should end before its
      * scope does.
      */
-    fun close() {
+    public fun close() {
         intents.trySend(Intent.Stop)
         intents.close()
         commandChannel.close()
@@ -195,7 +194,7 @@ class GaplessController(
         val gen = generation
         transitionJob = scope.launch {
             delay(preloadMs)
-            if (isActive) intents.send(Intent.ReadyToPlay(asset, item, gen))
+            if (isActive) intents.trySend(Intent.ReadyToPlay(asset, item, gen)) // no-op once closed
         }
     }
 
@@ -234,7 +233,7 @@ class GaplessController(
             withTimeoutOrNull(readyTimeoutMs) {
                 while (!isReady(item)) delay(READY_POLL_MS)
             }
-            if (isActive) intents.send(Intent.ReadyToPlay(asset, item, gen))
+            if (isActive) intents.trySend(Intent.ReadyToPlay(asset, item, gen)) // no-op once closed
         }
     }
 
@@ -329,7 +328,7 @@ class GaplessController(
     private fun toPlaybackItem(g: GaplessAsset): PlaybackItem {
         val item = when {
             g.isVideo -> PlaybackItem.Video(
-                uri = Uri.parse(g.uri),
+                uri = g.uri,
                 mimeType = g.mimeType,
                 aspectRatioHint = aspectRatioOf(g.width, g.height),
                 volume = g.volume,
