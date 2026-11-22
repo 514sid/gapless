@@ -9,9 +9,9 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.media3.common.C
-import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
+import androidx.media3.common.VideoSize
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.DefaultRenderersFactory
@@ -52,8 +52,9 @@ internal class DualVideoStateMachine(
 
     private var pendingItem: PlaybackItem.Video? = null
 
-    private var readyA = false
-    private var readyB = false
+    // Written on the main thread, read by the controller's readiness check.
+    @Volatile private var readyA = false
+    @Volatile private var readyB = false
 
     private val inactiveSlot: Int
         get() = if (renderState.activeSlot == 0) 1 else 0
@@ -83,7 +84,7 @@ internal class DualVideoStateMachine(
         val target = inactiveSlot
         val p = player(target)
         setReady(target, false)
-        setAspect(target, item.targetAspectRatio)
+        setAspect(target, item.aspectRatioHint)
 
         p.volume = 0f
         p.setMediaItem(buildMediaItem(item))
@@ -98,7 +99,7 @@ internal class DualVideoStateMachine(
 
         if (pendingItem?.playbackId != item.playbackId) {
             setReady(target, false)
-            setAspect(target, item.targetAspectRatio)
+            setAspect(target, item.aspectRatioHint)
             p.setMediaItem(buildMediaItem(item))
             p.prepare()
         }
@@ -171,23 +172,11 @@ internal class DualVideoStateMachine(
                 repeatMode = Player.REPEAT_MODE_OFF
                 addListener(object : Player.Listener {
                     override fun onRenderedFirstFrame() = setReady(slot, true)
+                    // TextureView stretches frames to its bounds, so the slot has to carry the real ratio.
+                    override fun onVideoSizeChanged(videoSize: VideoSize) {
+                        videoSize.displayAspectRatio()?.let { setAspect(slot, it) }
+                    }
                     override fun onPlayerError(error: PlaybackException) = onError(slot, error)
                 })
             }
-
-    private fun buildMediaItem(item: PlaybackItem.Video): MediaItem =
-        MediaItem.Builder()
-            .setUri(item.uri)
-            .setTag(item.targetAspectRatio)
-            .apply {
-                val clipMs = item.durationMs
-                if (clipMs != null && clipMs > 0L) {
-                    setClippingConfiguration(
-                        MediaItem.ClippingConfiguration.Builder()
-                            .setEndPositionMs(clipMs)
-                            .build()
-                    )
-                }
-            }
-            .build()
 }

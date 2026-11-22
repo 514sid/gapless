@@ -9,9 +9,9 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.media3.common.C
-import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
+import androidx.media3.common.VideoSize
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.DefaultRenderersFactory
@@ -43,6 +43,10 @@ internal class VideoStateMachine(context: Context, config: GaplessVideoConfig = 
             addListener(object : Player.Listener {
                 override fun onRenderedFirstFrame() {
                     onFirstFrameRendered()
+                }
+                // TextureView stretches frames to its bounds, so the layout has to carry the real ratio.
+                override fun onVideoSizeChanged(videoSize: VideoSize) {
+                    videoSize.displayAspectRatio()?.let { renderState = renderState.copy(aspectRatio = it) }
                 }
                 override fun onPlayWhenReadyChanged(playWhenReady: Boolean, reason: Int) {
                     if (reason == Player.PLAY_WHEN_READY_CHANGE_REASON_END_OF_MEDIA_ITEM) {
@@ -110,7 +114,7 @@ internal class VideoStateMachine(context: Context, config: GaplessVideoConfig = 
             }
             exoPlayer.addMediaItem(buildMediaItem(item))
         } else {
-            renderState = renderState.copy(aspectRatio = item.targetAspectRatio)
+            renderState = renderState.copy(aspectRatio = item.aspectRatioHint)
             exoPlayer.setMediaItem(buildMediaItem(item))
             exoPlayer.playWhenReady = false
             exoPlayer.prepare()
@@ -120,10 +124,13 @@ internal class VideoStateMachine(context: Context, config: GaplessVideoConfig = 
     override fun play(item: PlaybackItem.Video) {
         if (pendingItem?.playbackId == item.playbackId) {
             if (isPlaying && exoPlayer.mediaItemCount > 1) {
-                if (renderState.aspectRatio != item.targetAspectRatio) {
+                // The next clip's real ratio is only known once it decodes; cover the cut with a
+                // snapshot whenever it may differ from what is on screen.
+                val hint = item.aspectRatioHint
+                if (hint == null || renderState.aspectRatio != hint) {
                     renderState = renderState.copy(snapshot = textureViewRef?.bitmap)
                 }
-                renderState = renderState.copy(aspectRatio = item.targetAspectRatio)
+                if (hint != null) renderState = renderState.copy(aspectRatio = hint)
                 exoPlayer.volume = item.volume
 
                 if (!pausedAtEnd) {
@@ -145,7 +152,7 @@ internal class VideoStateMachine(context: Context, config: GaplessVideoConfig = 
         } else {
             pendingItem = item
             pausedAtEnd = false
-            renderState = renderState.copy(aspectRatio = item.targetAspectRatio)
+            renderState = renderState.copy(aspectRatio = item.aspectRatioHint)
             exoPlayer.volume = item.volume
             exoPlayer.setMediaItem(buildMediaItem(item))
             exoPlayer.prepare()
@@ -202,20 +209,4 @@ internal class VideoStateMachine(context: Context, config: GaplessVideoConfig = 
             modifier = modifier,
         )
     }
-
-    private fun buildMediaItem(item: PlaybackItem.Video): MediaItem =
-        MediaItem.Builder()
-            .setUri(item.uri)
-            .setTag(item.targetAspectRatio)
-            .apply {
-                val clipMs = item.durationMs
-                if (clipMs != null && clipMs > 0L) {
-                    setClippingConfiguration(
-                        MediaItem.ClippingConfiguration.Builder()
-                            .setEndPositionMs(clipMs)
-                            .build()
-                    )
-                }
-            }
-            .build()
 }

@@ -58,6 +58,9 @@ internal class WebStateMachine(
     private var refreshJob: Job? = null
     private var commitDeferred: CompletableDeferred<Unit>? = null
 
+    /** True while the refresh loop is reloading the current page into the hidden slot. */
+    private var isRefreshing = false
+
     var pageCommitted: Boolean = false
         private set
 
@@ -153,6 +156,7 @@ internal class WebStateMachine(
 
                 Log.d(TAG, "Refresh triggered: Preloading ${item.url} into ${targetView.slotName()}")
                 commitDeferred = CompletableDeferred()
+                isRefreshing = true
                 targetView.post { targetView.loadUrl(item.url) }
 
                 try {
@@ -170,6 +174,8 @@ internal class WebStateMachine(
                 } catch (_: Exception) {
                     Log.w(TAG, "Refresh failed or timed out. Keeping current page visible.")
                     inactiveWebView.loadBlank()
+                } finally {
+                    isRefreshing = false
                 }
             }
         }
@@ -232,14 +238,7 @@ internal class WebStateMachine(
                 if (request.isForMainFrame) {
                     val message = "Web Error on ${view.slotName()}: ${error.description}"
                     Log.e(TAG, message)
-                    commitDeferred?.completeExceptionally(Exception(message))
-                    val pending = pendingItem
-                    if (pending != null) {
-                        onPreloadError?.invoke(pending.assetId, message)
-                    } else {
-                        onError?.invoke(message)
-                    }
-                    view.loadBlank()
+                    reportMainFrameError(view, message)
                 }
             }
 
@@ -247,14 +246,7 @@ internal class WebStateMachine(
                 if (request.isForMainFrame) {
                     val message = "HTTP Error on ${view.slotName()}: ${errorResponse.statusCode}"
                     Log.e(TAG, message)
-                    commitDeferred?.completeExceptionally(Exception(message))
-                    val pending = pendingItem
-                    if (pending != null) {
-                        onPreloadError?.invoke(pending.assetId, message)
-                    } else {
-                        onError?.invoke(message)
-                    }
-                    view.loadBlank()
+                    reportMainFrameError(view, message)
                 }
             }
         }
@@ -277,6 +269,18 @@ internal class WebStateMachine(
         }
 
         loadBlank()
+    }
+
+    private fun reportMainFrameError(view: WebView, message: String) {
+        commitDeferred?.completeExceptionally(Exception(message))
+        val pending = pendingItem
+        when {
+            pending != null -> onPreloadError?.invoke(pending.assetId, message)
+            // A failed refresh leaves the current page on screen; nothing for the host to act on.
+            isRefreshing && view === inactiveWebView -> Unit
+            else -> onError?.invoke(message)
+        }
+        view.loadBlank()
     }
 
     private fun WebView.loadBlank() {

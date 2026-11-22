@@ -15,6 +15,7 @@ import io.github._514sid.gapless.internal.PlayerOrchestrator
 import io.github._514sid.gapless.internal.RotatedContainer
 import io.github._514sid.gapless.internal.image.ImagePlayer
 import io.github._514sid.gapless.internal.web.WebPlayer
+import java.util.UUID
 
 @Composable
 fun GaplessPlayer(
@@ -32,12 +33,16 @@ fun GaplessPlayer(
             o.onError = { message -> manager.onPlaybackError(message) }
             o.onPreloadError = { assetId, message -> manager.onPreloadError(assetId, message) }
             o.onPreloadMissed = { assetId, elapsedMs -> manager.onPreloadMissed(assetId, elapsedMs) }
-            manager.isNextReadyProvider = { o.isNextReady }
         }
     }
 
     DisposableEffect(orchestrator) {
+        val isReady: (UUID) -> Boolean = orchestrator::isReady
+        manager.isReadyProvider = isReady
         onDispose {
+            // The controller can outlive this composable (e.g. in a ViewModel); don't let it keep
+            // the released orchestrator, and through it the Context and WebViews, reachable.
+            if (manager.isReadyProvider === isReady) manager.isReadyProvider = null
             orchestrator.release()
             manager.stop()
         }
