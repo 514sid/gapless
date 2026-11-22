@@ -570,6 +570,7 @@ private fun defaultExoPlayer(context: Context, config: GaplessVideoConfig): ExoP
                     config.bufferForPlaybackMs,
                     config.bufferForPlaybackAfterRebufferMs,
                 )
+                .apply { if (config.targetBufferBytes > 0) setTargetBufferBytes(config.targetBufferBytes) }
                 .build()
         )
         .build()

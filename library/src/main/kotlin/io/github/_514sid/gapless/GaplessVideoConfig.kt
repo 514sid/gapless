@@ -25,6 +25,10 @@ public enum class GaplessVideoStrategy {
  * stream, a hung decoder) before the player restarts it, in milliseconds. Repeated stalls end in a
  * [GaplessEvent.PlaybackError]. Zero or negative disables the check. Applies to
  * [GaplessVideoStrategy.DUAL_INSTANCE] only.
+ * @param targetBufferBytes The most media each player buffers, in bytes, whatever the durations
+ * above allow. Buffers are on the Java heap, and the default strategy runs two players, so this
+ * bounds video memory at about twice this value. Defaults to 32 MB, about 5 seconds of 50 Mbps 4K.
+ * Zero or negative uses Media3's own limit of up to about 144 MB per player.
  */
 public data class GaplessVideoConfig(
     val strategy: GaplessVideoStrategy = GaplessVideoStrategy.DUAL_INSTANCE,
@@ -34,4 +38,5 @@ public data class GaplessVideoConfig(
     val bufferForPlaybackMs: Int = 500,
     val bufferForPlaybackAfterRebufferMs: Int = 1_000,
     val stallTimeoutMs: Long = 15_000,
+    val targetBufferBytes: Int = 32 * 1024 * 1024,
 )

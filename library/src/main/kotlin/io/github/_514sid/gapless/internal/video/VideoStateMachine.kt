@@ -35,6 +35,7 @@ internal class VideoStateMachine(context: Context, config: GaplessVideoConfig = 
                     config.bufferForPlaybackMs,
                     config.bufferForPlaybackAfterRebufferMs,
                 )
+                .apply { if (config.targetBufferBytes > 0) setTargetBufferBytes(config.targetBufferBytes) }
                 .build()
         )
         .setPauseAtEndOfMediaItems(true)
@@ -174,11 +175,21 @@ internal class VideoStateMachine(context: Context, config: GaplessVideoConfig = 
         }
     }
 
-    /** A copy of the frame on screen to cover the cut, or null if there's no memory for one. */
-    private fun captureFrame(): Bitmap? = try {
-        textureViewRef?.bitmap
-    } catch (_: OutOfMemoryError) {
-        null
+    /**
+     * A copy of the frame on screen to cover the cut, or null if there's no memory for one. It is
+     * only up for a few frames, so it is taken at half size: a full-size copy of a 4K view is a
+     * 33 MB native allocation and GPU readback on every cut.
+     */
+    private fun captureFrame(): Bitmap? {
+        val view = textureViewRef ?: return null
+        val width = view.width / SNAPSHOT_DIVISOR
+        val height = view.height / SNAPSHOT_DIVISOR
+        if (width <= 0 || height <= 0) return null
+        return try {
+            view.getBitmap(width, height)
+        } catch (_: OutOfMemoryError) {
+            null
+        }
     }
 
     override fun clear() {
@@ -206,5 +217,9 @@ internal class VideoStateMachine(context: Context, config: GaplessVideoConfig = 
             },
             modifier = modifier,
         )
+    }
+
+    private companion object {
+        const val SNAPSHOT_DIVISOR = 2
     }
 }

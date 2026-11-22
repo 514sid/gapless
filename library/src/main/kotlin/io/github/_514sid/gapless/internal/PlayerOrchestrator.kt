@@ -84,6 +84,7 @@ internal class PlayerOrchestrator(
         web.onError = { message -> onError?.invoke(message) }
         web.onPreloadError = { assetId, message -> onPreloadError?.invoke(assetId, message) }
         image.onError = { assetId, message -> onPreloadError?.invoke(assetId, message) }
+        image.onPlaybackError = { message -> onError?.invoke(message) }
 
         commandJob = scope.launch {
             commands.collect { command -> dispatch(command) }
@@ -122,9 +123,9 @@ internal class PlayerOrchestrator(
         }
     }
 
+    /** The size content is shown at, after rotation. */
     fun updateContainerSize(width: Int, height: Int) {
-        image.containerWidth = width
-        image.containerHeight = height
+        image.updateContainerSize(width, height)
     }
 
     private fun prepare(item: PlaybackItem) {
