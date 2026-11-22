@@ -30,6 +30,7 @@ adb shell am start -S -n io.github.gapless.sample/.MainActivity --es playlist co
 - `--ef volume 0` mutes the videos. The default is `1`.
 - `--ez clock true` shows the device clock overlay.
 - `--es ids a,b,c` plays just those assets, in that order, instead of a playlist.
+- `--ei rotation 90` rotates the players clockwise (`90`, `180` or `270`), for a screen mounted on its side. With two players and `90` or `270`, they still sit side by side as the viewer sees them.
 - `--ez fallback false` turns off `GaplessVideoConfig.enableDecoderFallback`, so a decoder that can't open fails instead of falling back to a software one.
 - `--ei players 2` shows two players side by side, each with its own controller and schedule. The right one plays the same list shifted by one clip and is muted; `--es playlist2 <name>` or `--es ids2 a,b,c` give it its own list and `--ef volume2 1` unmutes it. Each player holds two decoders, so two players need four. On a TV with two hardware decoders the rest fall back to software decoding, which is why `split_720p` exists.
 - `--ez uhd false` leaves out videos larger than 1920x1080 (the two 4K clips), for devices that only decode Full HD. `--ez uhd true` keeps them. Without the extra, the app keeps them only if the display has a mode above 1920x1080. Images and broken assets are never left out, so `broken_hevc_4320p` still tests a clip the decoder can't take.

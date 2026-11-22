@@ -15,6 +15,8 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
@@ -51,6 +53,7 @@ class PlayerActivity : ComponentActivity() {
         const val EXTRA_IDS = "ids"
         const val EXTRA_PLAYERS = "players"
         const val EXTRA_FALLBACK = "fallback"
+        const val EXTRA_ROTATION = "rotation"
         const val EXTRA_PLAYLIST2 = "playlist2"
         const val EXTRA_IDS2 = "ids2"
         const val EXTRA_VOLUME2 = "volume2"
@@ -102,10 +105,19 @@ class PlayerActivity : ComponentActivity() {
         }
         Log.d(
             TAG,
-            "Players: $players (uhd=$allowUhd, " +
+            "Players: $players (uhd=$allowUhd, rotation=${intent.getIntExtra(EXTRA_ROTATION, 0)}, " +
                 "fallback=${intent.getBooleanExtra(EXTRA_FALLBACK, true)})",
         )
         runners.forEach { it.start() }
+
+        // Clockwise, for a screen mounted on its side: 0, 90, 180 or 270.
+        val rotation = when (intent.getIntExtra(EXTRA_ROTATION, 0)) {
+            90 -> GaplessRotation.Deg90
+            180 -> GaplessRotation.Deg180
+            270 -> GaplessRotation.Deg270
+            else -> GaplessRotation.Deg0
+        }
+        val sideways = rotation == GaplessRotation.Deg90 || rotation == GaplessRotation.Deg270
 
         val videoConfig = GaplessVideoConfig(
             // false: a decoder that can't open fails instead of falling back to a software one.
@@ -119,14 +131,23 @@ class PlayerActivity : ComponentActivity() {
         setContent {
             MaterialTheme {
                 Surface(modifier = Modifier.fillMaxSize(), color = Color.Black) {
-                    Row(Modifier.fillMaxSize()) {
-                        runners.forEach { runner ->
-                            GaplessPlayer(
-                                modifier = Modifier.weight(1f).fillMaxHeight(),
-                                controller = runner.controller,
-                                rotation = GaplessRotation.Deg0,
-                                videoConfig = videoConfig,
-                            )
+                    // On a sideways screen, players stacked top to bottom here read as side by
+                    // side to the viewer.
+                    val player: @Composable (PlaylistRunner, Modifier) -> Unit = { runner, modifier ->
+                        GaplessPlayer(
+                            modifier = modifier,
+                            controller = runner.controller,
+                            rotation = rotation,
+                            videoConfig = videoConfig,
+                        )
+                    }
+                    if (sideways) {
+                        Column(Modifier.fillMaxSize()) {
+                            runners.forEach { player(it, Modifier.weight(1f).fillMaxWidth()) }
+                        }
+                    } else {
+                        Row(Modifier.fillMaxSize()) {
+                            runners.forEach { player(it, Modifier.weight(1f).fillMaxHeight()) }
                         }
                     }
                     if (showClock) DeviceClock()
