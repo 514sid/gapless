@@ -403,12 +403,30 @@ class ImageStateMachineTest {
         machine.onError = { assetId, _ -> failed += assetId }
         val item = imageItem("photo.jpg").apply { assetId = "poster" }
         machine.prepare(item)
-        val slot = machine.renderState.slotB!!
+        // As handed to the slot once its preload finished.
+        val slot = machine.renderState.slotB!!.copy(loaded = true)
 
         machine.onDisplayError(slot, "out of memory")
         machine.onDisplayError(slot, "out of memory")
         assertEquals(listOf("poster"), failed)
         assertFalse(machine.isPrepareComplete)
+    }
+
+    @Test
+    fun `an error from a staged slot still waiting for its preload is ignored`() {
+        val failed = mutableListOf<String>()
+        machine.onError = { assetId, _ -> failed += assetId }
+        val item = imageItem("photo.jpg").apply { assetId = "poster" }
+        machine.prepare(item)
+        val slot = machine.renderState.slotB!!
+        assertFalse(slot.loaded)
+
+        // Coil reports a slot with no image to load as an error.
+        machine.onDisplayError(slot, "The request's data is null.")
+        assertTrue(failed.isEmpty())
+
+        machine.play(item)
+        assertTrue(failed.isEmpty())
     }
 
     @Test

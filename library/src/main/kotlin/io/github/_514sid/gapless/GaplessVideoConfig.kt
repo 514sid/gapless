@@ -5,10 +5,13 @@ package io.github._514sid.gapless
  * loads the next clip, so a cut only swaps which one is on screen.
  *
  * @param enableDecoderFallback When the preferred (usually hardware) decoder fails to open, try the
- * device's other decoders, typically a software one, instead of failing. On by default. It costs
- * nothing while the preferred decoder works; a software decoder that does take over uses more CPU.
- * With it off, a second decoder that can't open makes the player switch to hard cuts, which keep
- * every clip on the hardware decoder but freeze the last frame briefly at each cut.
+ * device's other decoders, typically a software one, instead of failing. Off by default: a hardware
+ * decoder usually fails to open because the device's decoders are all in use, and a software decoder
+ * taking over then decodes on the CPU, which stutters on the weak CPUs of TVs and signage players.
+ * Off, a second decoder that can't open makes the player switch to hard cuts instead, which keep
+ * every clip on the hardware decoder but hold the last frame briefly at each cut. Formats that only
+ * a software decoder supports play in software either way; this only decides what happens when the
+ * first choice won't open.
  * @param minBufferMs Minimum duration of media to buffer before playback can start, in milliseconds.
  * @param maxBufferMs Maximum duration of media to buffer at any point, in milliseconds.
  * @param bufferForPlaybackMs Duration of media buffered before playback starts or resumes, in milliseconds.
@@ -22,7 +25,7 @@ package io.github._514sid.gapless
  * Zero or negative uses Media3's own limit of up to about 144 MB per player.
  */
 public data class GaplessVideoConfig(
-    val enableDecoderFallback: Boolean = true,
+    val enableDecoderFallback: Boolean = false,
     val minBufferMs: Int = 1_000,
     val maxBufferMs: Int = 3_000,
     val bufferForPlaybackMs: Int = 500,

@@ -392,6 +392,17 @@ PLAYLISTS = {
     "mixed": ["h264_1080p30", "image_1920x1080_jpg", "web_timer", "hevc_1080p30",
               "image_8000x6000_huge_jpg", "vp9_1080p30", "image_1920x1080_alpha_png"],
     "portrait": ["h264_1080x1920p30_portrait", "image_1080x1920_portrait_jpg"],
+    # A day-long run: every codec, frame rate and image type, a web page, short clips back to
+    # back, and a few broken assets spread through, so each loop exercises the failure paths too.
+    # About two minutes a loop; 4K clips drop out on Full HD devices.
+    "soak": [
+        "h264_1080p30", "image_1920x1080_jpg", "hevc_1080p30", "web_timer", "vp9_1080p30",
+        "image_8000x6000_huge_jpg", "av1_1080p30", "h264_1080p60", "image_1920x1080_alpha_png",
+        "h264_1080p25", "broken_truncated_mp4", "h264_1080p30_mp3", "image_1080x1920_portrait_jpg",
+        "h264_720p30_noaudio", "broken_garbage_jpg", "short_a_1s", "short_b_1s", "short_a_1s",
+        "image_1920x1080_webp", "h264_1080x1920p30_portrait", "h264_2160p30", "broken_missing_web",
+        "hevc_720p30", "image_640x360_small_png", "vp9_720p30", "image_3840x2160_jpg",
+    ],
     # For two players side by side: each half of a 1080p screen is under 720p anyway.
     "split_720p": ["h264_720p30", "hevc_720p30", "vp9_720p30"],
 }
