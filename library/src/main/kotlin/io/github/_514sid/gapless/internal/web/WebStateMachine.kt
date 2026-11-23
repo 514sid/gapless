@@ -2,6 +2,7 @@ package io.github._514sid.gapless.internal.web
 
 import android.annotation.SuppressLint
 import android.content.Context
+import android.os.Build
 import android.util.Log
 import android.view.ViewGroup
 import android.webkit.CookieManager
@@ -26,13 +27,18 @@ import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.withTimeoutOrNull
 import java.util.UUID
 
 /**
  * A/B web slots. The WebViews are created on the first web asset, not up front: constructing one
  * throws when the device has no usable WebView provider (common on TV boxes while WebView updates),
  * and that must fail only the web asset, not every playlist. A slot whose renderer process dies is
- * destroyed and replaced, since an unhandled renderer death kills the app.
+ * destroyed and replaced, since an unhandled renderer death kills the app. A renderer that stops
+ * responding (it no longer paints pages or runs scripts, while its memory keeps growing) is killed
+ * and replaced the same way; see [onPaintTimeout].
+ *
+ * @param respondsToScript Whether the renderer behind a WebView still runs scripts. Replaced in tests.
  */
 @MainThread
 @SuppressLint("SetJavaScriptEnabled")
@@ -40,11 +46,24 @@ internal class WebStateMachine(
     private val context: Context,
     private val scope: CoroutineScope,
     private val config: GaplessWebConfig = GaplessWebConfig(),
+    private val respondsToScript: suspend (WebView) -> Boolean = ::runsScript,
 ) {
     var onError: ((String) -> Unit)? = null
     var onPreloadError: ((assetId: String, message: String) -> Unit)? = null
     companion object {
         private const val TAG = "WebStateMachine"
+        private const val PAINT_TIMEOUT_MS = 5_000L
+        // Kept short so the paint timeout and this check end before the controller's default
+        // readyTimeoutMs of 10 seconds, which would report the hung page as started.
+        private const val SCRIPT_TIMEOUT_MS = 3_000L
+        internal const val RENDERER_HUNG = "WebView renderer stopped responding"
+
+        /** Runs a trivial script in [view]'s page; false when the renderer doesn't answer in time. */
+        private suspend fun runsScript(view: WebView): Boolean {
+            val answered = CompletableDeferred<Unit>()
+            view.evaluateJavascript("1") { answered.complete(Unit) }
+            return withTimeoutOrNull(SCRIPT_TIMEOUT_MS) { answered.await() } != null
+        }
         private const val BLANK_PAGE =
             "<html><head><style>body { background-color: black; margin: 0; padding: 0; }</style></head><body></body></html>"
     }
@@ -190,12 +209,17 @@ internal class WebStateMachine(
 
             awaitingSwap = true
             val swap = try {
-                withTimeout(5000) { commitDeferred?.await() }
+                withTimeout(PAINT_TIMEOUT_MS) { commitDeferred?.await() }
                 logDebug("play(): Pixels painted! Swapping instantly to slot $target.")
                 true
             } catch (_: TimeoutCancellationException) {
-                Log.w(TAG, "play(): Page did not paint in time; swapping anyway.")
-                true
+                if (onPaintTimeout(target)) {
+                    Log.w(TAG, "play(): Page did not paint in time; swapping anyway.")
+                    true
+                } else {
+                    onError?.invoke(RENDERER_HUNG)
+                    false
+                }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
@@ -240,7 +264,7 @@ internal class WebStateMachine(
                 targetView.loadPage(item.url)
 
                 try {
-                    withTimeout(5000) { commitDeferred?.await() }
+                    withTimeout(PAINT_TIMEOUT_MS) { commitDeferred?.await() }
 
                     if (pendingItem != null) break
 
@@ -251,6 +275,14 @@ internal class WebStateMachine(
                     if (renderState.activeSlot == target) {
                         inactiveWebView?.loadBlank()
                     }
+                } catch (_: TimeoutCancellationException) {
+                    if (!onPaintTimeout(target)) {
+                        // The page on screen ran in the same renderer, so it is gone too.
+                        onError?.invoke(RENDERER_HUNG)
+                        break
+                    }
+                    Log.w(TAG, "Refresh timed out. Keeping current page visible.")
+                    inactiveWebView?.loadBlank()
                 } catch (_: Exception) {
                     Log.w(TAG, "Refresh failed or timed out. Keeping current page visible.")
                     inactiveWebView?.loadBlank()
@@ -299,16 +331,7 @@ internal class WebStateMachine(
         val message = "WebView renderer gone on ${view.slotName()}"
         Log.e(TAG, message)
 
-        // A dead WebView must leave the hierarchy before it is destroyed.
-        (view.parent as? ViewGroup)?.removeView(view)
-        view.destroy()
-        views[slot] = null
-        loadedUrls[slot] = null
-        try {
-            views[slot] = createWebView(slot)
-        } catch (e: Exception) {
-            Log.e(TAG, "Could not replace WebView on slot $slot", e)
-        }
+        replaceView(slot)
         publishViews()
 
         if (!hadPage) return
@@ -327,6 +350,40 @@ internal class WebStateMachine(
             // A refresh or a page already swapped out: the visible page is unaffected.
             else -> Unit
         }
+    }
+
+    private fun replaceView(slot: Int) {
+        val view = views[slot] ?: return
+        // A dead WebView must leave the hierarchy before it is destroyed.
+        (view.parent as? ViewGroup)?.removeView(view)
+        view.destroy()
+        views[slot] = null
+        loadedUrls[slot] = null
+        try {
+            views[slot] = createWebView(slot)
+        } catch (e: Exception) {
+            Log.e(TAG, "Could not replace WebView on slot $slot", e)
+        }
+    }
+
+    /**
+     * A page in [slot] did not paint within [PAINT_TIMEOUT_MS]. A slow page still runs scripts, so
+     * the caller goes on as before. A renderer that doesn't is hung: on a TV in a soak test one
+     * stopped painting every page for hours while it grew past 500 MB, until the system killed it.
+     * Kill it now and start both slots on a fresh one. Returns whether the renderer is responsive.
+     */
+    private suspend fun onPaintTimeout(slot: Int): Boolean {
+        val view = views[slot] ?: return true
+        if (respondsToScript(view)) return true
+        // Checked again: the renderer may have died and been replaced while the script was pending.
+        if (views[slot] !== view) return false
+        Log.e(TAG, "$RENDERER_HUNG; restarting it")
+        // Both slots share one renderer. Kill it, or the new WebViews could attach to it again.
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) view.webViewRenderProcess?.terminate()
+        commitDeferred?.cancel()
+        for (s in views.indices) replaceView(s)
+        publishViews()
+        return false
     }
 
     private fun createWebView(slot: Int) = WebView(context).apply {

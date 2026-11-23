@@ -185,6 +185,7 @@ def main():
         ("threads", "Threads", ""), ("fds", "Open files", ""),
         ("memavail_kb", "System free memory", "MB"), ("swapfree_kb", "Free swap", "MB"),
         ("hal_rss_kb", "Hardware codec process", "MB"), ("swcodec_rss_kb", "Software codec process", "MB"),
+        ("renderer_kb", "WebView renderer (RAM + swap)", "MB"),
         ("load1", "Load average", ""),
     ]:
         pts = [(int(r["time"]) - t0, float(r[col])) for r in rows if r.get(col)]

@@ -108,6 +108,7 @@ Each of these should end in a `PlaybackError` or `PreloadError` (or, for some, p
 | `broken_video_as_image` | An MP4 with an `image/jpeg` MIME type |
 | `broken_missing_web` | A page that isn't in the APK |
 | `broken_unreachable_web` | `https://unreachable.invalid/`, a host that never resolves |
+| `broken_hung_web` | A script that never returns, so the WebView renderer hangs before it paints |
 
 ## Soak test
 

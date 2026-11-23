@@ -316,6 +316,12 @@ def write_png_bomb(path, w, h):
         fh.write(chunk(b"IEND", b""))
 
 
+# Blocks the renderer's main thread before the first paint, as a hung renderer does.
+HUNG_PAGE = """<!doctype html>
+<html><body style="background:#400"><script>for (;;) {}</script></body></html>
+"""
+
+
 def render_broken(out_dir, wanted):
     """Writes the damaged files and returns their manifest entries."""
     good_video = os.path.join(out_dir, "h264_1080p30.mp4")
@@ -358,6 +364,9 @@ def render_broken(out_dir, wanted):
              durationMs=WEB_SECONDS * 1000, note="No such page in the APK"),
         dict(id="broken_unreachable_web", uri="https://unreachable.invalid/", mimeType="text/html",
              durationMs=WEB_SECONDS * 1000, note="A host that never resolves"),
+        dict(id="broken_hung_web", file="broken_hung_web.html", mimeType="text/html",
+             durationMs=WEB_SECONDS * 1000,
+             note="A script that never returns, so the WebView renderer hangs before it paints"),
     ]
 
     files = {e["id"]: e.get("file") for e in entries}
@@ -377,6 +386,7 @@ def render_broken(out_dir, wanted):
     make("broken_truncated_jpg", lambda p: write_truncated(good_image, p, 0.5))
     make("broken_empty_png", lambda p: open(p, "wb").close())
     make("broken_png_bomb", lambda p: write_png_bomb(p, 20000, 20000))
+    make("broken_hung_web", lambda p: open(p, "w").write(HUNG_PAGE))
     return entries
 
 
