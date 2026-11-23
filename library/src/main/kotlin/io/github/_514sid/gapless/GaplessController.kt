@@ -95,6 +95,7 @@ public class GaplessController(
         data class PreloadError(val assetId: String, val message: String) : Intent
         data class PlaybackError(val message: String) : Intent
         data class Shown(val playbackId: UUID, val startedAt: Long?) : Intent
+        data class Completed(val playbackId: UUID) : Intent
     }
 
     private val intents = Channel<Intent>(Channel.UNLIMITED)
@@ -217,6 +218,11 @@ public class GaplessController(
         intents.trySend(Intent.Shown(playbackId, startedAt))
     }
 
+    /** The video with [playbackId] played to its end. */
+    internal fun onCompleted(playbackId: UUID) {
+        intents.trySend(Intent.Completed(playbackId))
+    }
+
     private suspend fun handle(intent: Intent) {
         when (intent) {
             is Intent.Start -> handleStart(intent.asset)
@@ -234,6 +240,11 @@ public class GaplessController(
             is Intent.PreloadError -> handlePreloadError(intent.assetId, intent.message)
             is Intent.PlaybackError -> handlePlaybackError(intent.message)
             is Intent.Shown -> handleShown(intent.playbackId, intent.startedAt)
+            is Intent.Completed -> {
+                // Only the current asset: a report about one already replaced or stopped is stale.
+                val asset = currentAsset?.takeIf { currentItem?.playbackId == intent.playbackId }
+                if (asset != null) _events.tryEmit(GaplessEvent.Completed(asset, intent.playbackId))
+            }
         }
     }
 

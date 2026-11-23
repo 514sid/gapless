@@ -216,7 +216,8 @@ lifecycleScope.launch {
     manager.events.collect { event ->
         when (event) {
             is GaplessEvent.Started       -> log("Playing: ${event.asset.id} [${event.playbackId}]")
-            is GaplessEvent.Ended         -> log("Finished: ${event.asset.id}")
+            is GaplessEvent.Ended         -> log("Replaced: ${event.asset.id}")
+            is GaplessEvent.Completed     -> log("Played to its end: ${event.asset.id}")
             is GaplessEvent.Preloading    -> log("Buffering next: ${event.asset.id}")
             is GaplessEvent.PlaybackError -> log("Error on ${event.asset.id}: ${event.message}")
             is GaplessEvent.PreloadError  -> log("Could not load ${event.asset.id}: ${event.message}")
@@ -230,6 +231,13 @@ Every `play(asset)` ends in `Started` for that asset, in `PreloadError` for it, 
 fails after the cut but before it shows, unless a later call supersedes it. A host whose schedule runs off `Started` must also move on after `PlaybackError` and after a
 `PreloadError` for the asset it just asked to play, or the schedule stops there. The sample app's
 `PlayerActivity` shows the pattern.
+
+`Ended` means the asset was replaced on screen. `Completed` means a video played to its end, a clip
+reaching its last frame or a stream that finished, while it is still on screen: its last frame
+stays up until the next `play()`, so a host can cut to the next asset at once instead of waiting for
+its own timer. That matters for streams of unknown length and clips shorter than their slot. A live
+stream that simply stops arriving doesn't complete; it stalls, is retried and ends in
+`PlaybackError`. Images and web pages have no end, so they never complete.
 
 ### Failure handling
 

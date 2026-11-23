@@ -22,6 +22,18 @@ public sealed class GaplessEvent {
      * asset cut away from before it was ever shown gets neither event.
      */
     public data class Ended(val asset: GaplessAsset, val playbackId: UUID, override val timestamp: Long = System.currentTimeMillis()) : GaplessEvent()
+
+    /**
+     * A video played to its end: a clip reached its last frame, or a stream finished (video on
+     * demand, or a live stream the server marked as ended). The last frame stays on screen until
+     * the next [GaplessController.play], and [Ended] still follows when something replaces it.
+     *
+     * Use it to move on as soon as a clip or stream is done, when its length is unknown or shorter
+     * than its slot, instead of holding the last frame. A live stream that just stops arriving
+     * doesn't end: it stalls, is retried, and ends in [PlaybackError]. Not emitted for images and
+     * web pages, which have no end, or for a clip cut away from before its end.
+     */
+    public data class Completed(val asset: GaplessAsset, val playbackId: UUID, override val timestamp: Long = System.currentTimeMillis()) : GaplessEvent()
     /**
      * The asset on screen failed and the player gave up on it. Transient video failures (network,
      * decoder, audio output, stalls) are retried inside the player first, so this means retries ran

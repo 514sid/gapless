@@ -45,6 +45,7 @@ class DualVideoStateMachineTest {
     private val errors = mutableListOf<String>()
     private val preloadErrors = mutableListOf<String>()
     private val starts = mutableListOf<Pair<java.util.UUID, Long>>()
+    private val completions = mutableListOf<java.util.UUID>()
     private lateinit var engine: DualVideoStateMachine
 
     private fun start(config: GaplessVideoConfig = GaplessVideoConfig()) {
@@ -54,6 +55,7 @@ class DualVideoStateMachineTest {
         engine.onErrorCallback = { errors += it }
         engine.onPreloadErrorCallback = { assetId, _ -> preloadErrors += assetId }
         engine.onStartedCallback = { id, startedAt -> starts += id to startedAt }
+        engine.onCompletedCallback = { id -> completions += id }
     }
 
     @After
@@ -459,6 +461,49 @@ class DualVideoStateMachineTest {
         assertEquals(listOf(b.playbackId), starts.map { it.first })
     }
 
+    // --- The end of a clip ---
+
+    @Test
+    fun `the playing clip reaching its end is reported once`() {
+        start()
+        val a = video("a")
+        playFirst(a)
+
+        playerOf(a).end()
+        playerOf(a).end()
+
+        assertEquals(listOf(a.playbackId), completions)
+    }
+
+    @Test
+    fun `a staged clip reaching its end is not reported`() {
+        start()
+        val a = video("a")
+        playFirst(a)
+        val b = video("b")
+        engine.prepare(b)
+
+        playerOf(b).end()
+
+        assertTrue(completions.isEmpty())
+    }
+
+    @Test
+    fun `the same clip played again reports its end again`() {
+        start()
+        val a = video("a")
+        playFirst(a)
+        playerOf(a).end()
+        val b = video("b")
+        engine.prepare(b)
+        playerOf(b).firstFrame()
+        engine.play(b)
+
+        playerOf(b).end()
+
+        assertEquals(listOf(a.playbackId, b.playbackId), completions)
+    }
+
     // --- Keeping a clip on its timeline ---
 
     /** A clock the test moves by hand. */
@@ -715,6 +760,12 @@ class DualVideoStateMachineTest {
         }
 
         fun firstFrame() = listener.onRenderedFirstFrame()
+
+        /** The player reaching the end of its media. */
+        fun end() {
+            playbackState = Player.STATE_ENDED
+            listener.onPlaybackStateChanged(Player.STATE_ENDED)
+        }
 
         /** The playback thread releasing a frame for display. */
         fun releaseFrame() =

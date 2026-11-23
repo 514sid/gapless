@@ -212,6 +212,12 @@ internal class DualVideoStateMachine(
      */
     var onStartedCallback: ((playbackId: UUID, startedAt: Long) -> Unit)? = null
 
+    /** The clip on screen reached its end. Reported once per play. */
+    var onCompletedCallback: ((playbackId: UUID) -> Unit)? = null
+
+    /** The last clip [onCompletedCallback] was called for, so a repeated end isn't reported twice. */
+    private var completedId: UUID? = null
+
     /** The clip passed to [play] whose start hasn't been reported yet. */
     private var awaitingStart: UUID? = null
 
@@ -292,6 +298,15 @@ internal class DualVideoStateMachine(
         pendingFlip = -1
         renderState = renderState.copy(activeSlot = target)
         clearSlot(old, keepFrame = false)
+    }
+
+    /** [slot]'s player reached the end of its media. */
+    private fun onPlaybackEnded(slot: Int) {
+        val item = items[slot] ?: return
+        // Only the clip that is playing; a staged one sits paused on its first frame.
+        if (slot != currentSlot || deferred[slot] || item.playbackId == completedId) return
+        completedId = item.playbackId
+        onCompletedCallback?.invoke(item.playbackId)
     }
 
     /** Main thread: the first frame since [play] was released on [slot]. */
@@ -658,6 +673,9 @@ internal class DualVideoStateMachine(
                 }
                 addListener(object : Player.Listener {
                     override fun onRenderedFirstFrame() = onFirstFrame(slot)
+                    override fun onPlaybackStateChanged(playbackState: Int) {
+                        if (playbackState == Player.STATE_ENDED) onPlaybackEnded(slot)
+                    }
                     // TextureView stretches frames to its bounds, so the slot has to carry the real ratio.
                     override fun onVideoSizeChanged(videoSize: VideoSize) {
                         if (isFrozen(slot)) return

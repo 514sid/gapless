@@ -44,6 +44,7 @@ public fun GaplessPlayer(
             o.onPreloadError = { assetId, message -> controller.onPreloadError(assetId, message) }
             o.onPreloadMissed = { assetId, elapsedMs -> controller.onPreloadMissed(assetId, elapsedMs) }
             o.onShown = { playbackId, startedAt -> controller.onShown(playbackId, startedAt) }
+            o.onCompleted = { playbackId -> controller.onCompleted(playbackId) }
         }
     }
 

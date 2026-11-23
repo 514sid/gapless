@@ -58,6 +58,8 @@ class PlaylistRunner(
                 }
             }
             is GaplessEvent.Ended -> log("Ended: ${event.asset.id} [${event.playbackId}]")
+            // The schedule cuts on the slot's duration; this only shows a clip ended before that.
+            is GaplessEvent.Completed -> log("Completed: ${event.asset.id} [${event.playbackId}]")
             is GaplessEvent.PlaybackError -> {
                 // The player already retried; this asset is done. Show the next one.
                 Log.e(TAG, "${prefix}Error on ${event.asset.id}: ${event.message}")
