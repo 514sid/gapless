@@ -77,6 +77,9 @@ internal class PlayerOrchestrator(
      */
     var onShown: ((playbackId: UUID, startedAt: Long?) -> Unit)? = null
 
+    /** A video on screen played to its end. */
+    var onCompleted: ((playbackId: UUID) -> Unit)? = null
+
     init {
         video.onErrorCallback = { message -> onError?.invoke(message) }
         video.onPreloadErrorCallback = { assetId, message -> onPreloadError?.invoke(assetId, message) }
@@ -85,6 +88,7 @@ internal class PlayerOrchestrator(
         image.onError = { assetId, message -> onPreloadError?.invoke(assetId, message) }
         image.onPlaybackError = { message -> onError?.invoke(message) }
         video.onStartedCallback = { playbackId, startedAt -> onShown?.invoke(playbackId, startedAt) }
+        video.onCompletedCallback = { playbackId -> onCompleted?.invoke(playbackId) }
         image.onShown = { playbackId -> onShown?.invoke(playbackId, null) }
         web.onShown = { playbackId -> onShown?.invoke(playbackId, null) }
 

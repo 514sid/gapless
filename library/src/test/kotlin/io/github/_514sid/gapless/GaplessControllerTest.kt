@@ -381,6 +381,42 @@ class GaplessControllerTest {
         assertTrue(h.plays.isEmpty())
     }
 
+    // Completed
+
+    @Test
+    fun `the end of the current video is reported as Completed`() = runTest {
+        val h = started(video("a"))
+        val a = h.plays.single()
+
+        h.controller.onCompleted(a.playbackId)
+        runCurrent()
+
+        val completed = h.eventsOf<GaplessEvent.Completed>().single()
+        assertEquals("a", completed.asset.id)
+        assertEquals(a.playbackId, completed.playbackId)
+        assertEquals("a", h.current?.id) // still on screen until the next play()
+    }
+
+    @Test
+    fun `the end of a video already replaced or stopped is not reported`() = runTest {
+        val h = started(video("a"))
+        val a = h.plays.single()
+        h.controller.prepareNext(video("b"))
+        runCurrent()
+        h.controller.play(video("b"))
+        runCurrent()
+
+        h.controller.onCompleted(a.playbackId)
+        runCurrent()
+        assertTrue(h.eventsOf<GaplessEvent.Completed>().isEmpty())
+
+        val b = h.plays.last()
+        h.controller.stop()
+        h.controller.onCompleted(b.playbackId)
+        runCurrent()
+        assertTrue(h.eventsOf<GaplessEvent.Completed>().isEmpty())
+    }
+
     // Start times
 
     @Test
