@@ -29,8 +29,15 @@ internal sealed class PlaybackItem {
         val height: Int
     ) : PlaybackItem()
 
+    /**
+     * @param javaScript Run at the start of every document, in [javaScriptOrigins].
+     * @param waitForReady Not ready to show until the page calls `gapless.ready()`.
+     */
     data class Web(
         val url: String,
-        val refreshIntervalMs: Long = 0L
+        val refreshIntervalMs: Long = 0L,
+        val javaScript: String? = null,
+        val javaScriptOrigins: Set<String> = emptySet(),
+        val waitForReady: Boolean = false,
     ) : PlaybackItem()
 }

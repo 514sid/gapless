@@ -5,7 +5,11 @@ import io.github._514sid.gapless.internal.PlaybackItem
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestScope
 import org.junit.After
+import android.os.Looper
+import android.webkit.WebView
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNotSame
 import org.junit.Assert.assertSame
@@ -13,6 +17,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
+import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 import java.util.UUID
 
@@ -44,9 +49,105 @@ class WebStateMachineTest {
 
     private fun page(url: String) = PlaybackItem.Web(url).also { it.assetId = url }
 
+    private fun idleMain() = shadowOf(Looper.getMainLooper()).idle()
+
+    /** The page in [view] finished painting, as the WebView reports it. */
+    private fun painted(view: WebView, url: String) {
+        idleMain() // the load is posted
+        shadowOf(view).webViewClient.onPageCommitVisible(view, url)
+    }
+
+    /** The page in [view] calls gapless.ready(). */
+    private fun callReady(view: WebView) {
+        val bridge = shadowOf(view).getJavascriptInterface("gapless")
+        bridge.javaClass.getMethod("ready").apply { isAccessible = true }.invoke(bridge)
+        idleMain()
+    }
+
     private fun advancePastPaintTimeout() {
         scope.testScheduler.advanceTimeBy(5_001)
         scope.testScheduler.runCurrent()
+    }
+
+    // Pages that say when they are ready
+
+    @Test
+    fun `a page that waits for ready isn't ready when it paints, only once it calls ready`() {
+        val item = PlaybackItem.Web("https://example.com/dash", waitForReady = true).also { it.assetId = "dash" }
+        machine.prepare(item)
+        val view = machine.renderState.webViewB!!
+
+        painted(view, item.url)
+        assertFalse(machine.pageCommitted)
+
+        callReady(view)
+        assertTrue(machine.pageCommitted)
+    }
+
+    @Test
+    fun `a ready call before the paint counts once the page paints`() {
+        val item = PlaybackItem.Web("https://example.com/dash", waitForReady = true).also { it.assetId = "dash" }
+        machine.prepare(item)
+        val view = machine.renderState.webViewB!!
+
+        callReady(view)
+        assertFalse(machine.pageCommitted)
+        painted(view, item.url)
+        assertTrue(machine.pageCommitted)
+    }
+
+    @Test
+    fun `a page that doesn't wait is ready when it paints`() {
+        val item = page("https://example.com/plain")
+        machine.prepare(item)
+
+        painted(machine.renderState.webViewB!!, item.url)
+
+        assertTrue(machine.pageCommitted)
+    }
+
+    @Test
+    fun `a waiting page that never calls ready is swapped in after the paint timeout`() {
+        val item = PlaybackItem.Web("https://example.com/dash", waitForReady = true).also { it.assetId = "dash" }
+        machine.prepare(item)
+        painted(machine.renderState.webViewB!!, item.url)
+
+        machine.play(item)
+        advancePastPaintTimeout()
+
+        assertEquals(listOf(item.playbackId), shown)
+        assertEquals(1, machine.renderState.activeSlot)
+    }
+
+    // Scripts
+
+    @Test
+    fun `without document start scripts, the script runs when the page paints, in its origins only`() {
+        val script = "document.body.style.background = 'red'"
+        val item = PlaybackItem.Web(
+            "https://example.com/news",
+            javaScript = script,
+            javaScriptOrigins = setOf("https://example.com"),
+        ).also { it.assetId = "news" }
+        machine.prepare(item)
+        val view = machine.renderState.webViewB!!
+
+        painted(view, "https://login.other.com/")
+        assertNull(shadowOf(view).lastEvaluatedJavascript)
+
+        painted(view, item.url)
+        assertEquals(script, shadowOf(view).lastEvaluatedJavascript)
+    }
+
+    @Test
+    fun `a page without a script gets none`() {
+        val item = page("https://example.com/plain")
+        machine.prepare(item)
+        val view = machine.renderState.webViewB!!
+
+        painted(view, item.url)
+
+        assertNull(shadowOf(view).lastEvaluatedJavascript)
     }
 
     @Test

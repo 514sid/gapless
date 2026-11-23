@@ -28,6 +28,13 @@ class SampleManifest(
             ?.filter { allowUhd || it.id in broken || !it.isUhdVideo() }
             ?.map { it.copy(volume = volume) }
 
+    /** The same media with every page script and readiness wait removed, for comparison. */
+    fun withoutScripts(): SampleManifest = SampleManifest(
+        assets.mapValues { (_, a) -> a.copy(javaScript = null, waitForPageReady = false) },
+        broken,
+        playlists,
+    )
+
     private fun GaplessAsset.isUhdVideo(): Boolean {
         if (!mimeType.startsWith("video/")) return false
         val w = width ?: return false
@@ -53,6 +60,8 @@ class SampleManifest(
                     width = a.optInt("width").takeIf { it > 0 },
                     height = a.optInt("height").takeIf { it > 0 },
                     durationMs = a.getLong("durationMs"),
+                    javaScript = a.optString("javaScript").takeIf { it.isNotEmpty() },
+                    waitForPageReady = a.optBoolean("waitForPageReady"),
                 )
             }
             val lists = json.getJSONObject("playlists")

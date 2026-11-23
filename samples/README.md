@@ -34,6 +34,7 @@ adb shell am start -S -n io.github.gapless.sample/.MainActivity --es playlist co
 - `--ez fallback true` turns on `GaplessVideoConfig.enableDecoderFallback` (off by default), so a decoder that can't open falls back to a software one instead of failing.
 - `--ei players 2` shows two players side by side, each with its own controller and schedule. The right one plays the same list shifted by one clip and is muted; `--es playlist2 <name>` or `--es ids2 a,b,c` give it its own list and `--ef volume2 1` unmutes it. Each player holds two decoders, so two players need four. On a TV with two hardware decoders, each player then switches to hard cuts, or with `--ez fallback true` the rest decode in software, which is why `split_720p` exists.
 - `--ez uhd false` leaves out videos larger than 1920x1080 (the two 4K clips), for devices that only decode Full HD. `--ez uhd true` keeps them. Without the extra, the app keeps them only if the display has a mode above 1920x1080. Images and broken assets are never left out, so `broken_hevc_4320p` still tests a clip the decoder can't take.
+- `--ez scripts false` drops every page's script and readiness wait, to compare a page with and without them.
 - `--es sync leader` or `--es sync <leader address>` plays in step with other devices on the LAN; see [Synced playback](#synced-playback).
 
 With no extra, the app plays `mixed`. The playlist in use, and whether 4K is on, is logged under the `GaplessPlayer` tag.
@@ -89,7 +90,15 @@ Each is shown for 4 seconds: JPEG, PNG and WebP at 1920x1080, a 1080x1920 portra
 
 `web_timer` is a local page with a running timer, a frame strip and a sweeping bar, driven by `requestAnimationFrame`.
 
-The `web_*` entries other than `web_timer` are live websites, loaded over the network: news front pages with ads and consent banners (BBC, the Guardian, CNN, AccuWeather), WebGL (Windy, three.js), maps (OpenStreetMap, Google Maps), a Grafana dashboard, a live clock (time.is), GitHub, Reddit, Amazon, light pages (Wikipedia, Hacker News) and an embedded YouTube video, which needs a video decoder next to ExoPlayer's. They change without notice, so they test how the player copes, not exact output. On a TV with about 1 GB of RAM, heavy sites take 200 to 300 MB in the WebView renderer, run the device out of memory within half an hour, and hold video frames for about half a second around each cut while they load.
+Three more local pages test page scripts and readiness (the `web_scripts` playlist):
+
+| Asset | What it tests |
+| --- | --- |
+| `web_script_check` | Its injected script marks that it ran and hides a fake red cookie banner. The page turns green and reads SCRIPT RAN FIRST when the script ran before the page's own; red NO SCRIPT, or the banner, means it didn't. |
+| `web_ready_8s` | Shows a red LOADING, then after 8 seconds a green READY and calls `gapless.ready()`. That's longer than the 6-second clip it preloads behind, so it isn't ready at its turn: with `waitForPageReady` the cut waits and the red never reaches the screen, while with `--ez scripts false` the red LOADING shows first. |
+| `web_ready_never` | Never calls `gapless.ready()`, so it is shown only when `play()` stops waiting. |
+
+The other `web_*` entries are live websites, loaded over the network: news front pages with ads and consent banners (BBC, the Guardian, CNN, AccuWeather), WebGL (Windy, three.js), maps (OpenStreetMap, Google Maps), a Grafana dashboard, a live clock (time.is), GitHub, Reddit, Amazon, light pages (Wikipedia, Hacker News) and an embedded YouTube video, which needs a video decoder next to ExoPlayer's. They change without notice, so they test how the player copes, not exact output. The BBC, Guardian, CNN and AccuWeather pages have a script that hides their cookie consent banners, and Wikipedia is shown only once fully loaded (`gapless.ready()` on `load`) and scrolls slowly. On a TV with about 1 GB of RAM, heavy sites take 200 to 300 MB in the WebView renderer, run the device out of memory within half an hour, and hold video frames for about half a second around each cut while they load.
 
 ### Broken
 

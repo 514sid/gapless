@@ -417,6 +417,76 @@ WEBSITES = [
 ]
 
 
+# Scripts run in web pages through GaplessAsset.javaScript, at document start.
+
+# Hides the common cookie consent banners and the scroll lock they put on the page, before the
+# first paint. Container names of the consent platforms the news sites above use.
+HIDE_CONSENT_JS = """(function () {
+  var css = '[id^="sp_message_container"], .fc-consent-root, #onetrust-consent-sdk,' +
+    ' #CybotCookiebotDialog, .qc-cmp2-container, #didomi-host, #usercentrics-root, #cmpbox,' +
+    ' #cmpbox2, .bbccookies-banner { display: none !important }' +
+    ' html, body { overflow: auto !important }';
+  var style = document.createElement('style');
+  style.textContent = css;
+  (document.head || document.documentElement).appendChild(style);
+})();"""
+
+# Shows the page only once it has fully loaded, then scrolls it slowly.
+READY_AND_SCROLL_JS = """window.addEventListener('load', function () {
+  if (window.gapless) gapless.ready();
+  setInterval(function () { window.scrollBy(0, 1); }, 20);
+});"""
+
+# For web_script_check: marks that it ran, and hides the page's fake banner.
+SCRIPT_CHECK_JS = """window.gaplessScriptRan = true;
+var style = document.createElement('style');
+style.textContent = '#banner { display: none !important }';
+(document.head || document.documentElement).appendChild(style);"""
+
+WEB_PAGE_STYLE = """<style>
+  html, body { margin: 0; height: 100%; color: #fff; font-family: sans-serif; overflow: hidden; }
+  .big { position: absolute; top: 30vh; width: 100%; text-align: center; font-size: 14vh; font-weight: bold; }
+  .small { position: absolute; top: 55vh; width: 100%; text-align: center; font-size: 4vh; }
+  .label { position: absolute; top: 3vh; left: 3vw; font-size: 4vh; }
+</style>"""
+
+# Reports whether the injected script ran before the page's own scripts; a fake cookie banner
+# shows unless the script hid it.
+SCRIPT_CHECK_PAGE = f"""<!doctype html>
+<html><head><meta charset="utf-8">{WEB_PAGE_STYLE}</head>
+<body style="background:#333">
+<div class="label">SCRIPT CHECK<br>web_script_check</div>
+<div class="big" id="result">?</div>
+<div class="small">the red cookie banner below should not appear</div>
+<div id="banner" style="position:absolute;bottom:0;width:100%;height:22vh;background:#c00;font-size:6vh;text-align:center;line-height:22vh">FAKE COOKIE BANNER</div>
+<script>
+  var ran = window.gaplessScriptRan === true;
+  document.body.style.background = ran ? '#063' : '#600';
+  document.getElementById('result').textContent = ran ? 'SCRIPT RAN FIRST' : 'NO SCRIPT';
+</script>
+</body></html>
+"""
+
+def ready_page(delay_s, calls):
+    title = "READY AFTER %d s" % delay_s if calls else "NEVER READY"
+    name = "web_ready_%ds" % delay_s if calls else "web_ready_never"
+    then = "if (window.gapless) gapless.ready();" if calls else ""
+    return f"""<!doctype html>
+<html><head><meta charset="utf-8">{WEB_PAGE_STYLE}</head>
+<body style="background:#900">
+<div class="label">{title}<br>{name}</div>
+<div class="big" id="state">LOADING</div>
+<div class="small">red LOADING should never reach the screen; green READY should</div>
+<script>
+  setTimeout(function () {{
+    {'document.body.style.background = "#063"; document.getElementById("state").textContent = "READY";' if calls else ''}
+    {then}
+  }}, {delay_s * 1000});
+</script>
+</body></html>
+"""
+
+
 # Playlists. The sample app plays one in a loop.
 
 PLAYLISTS = {
@@ -447,6 +517,10 @@ PLAYLISTS = {
                  for x in (site, ["h264_1080p30", "image_1920x1080_jpg", "hevc_1080p30",
                                   "vp9_1080p30"][i % 4])],
     "websites_only": [site for site, _, _ in WEBSITES],
+    # Scripts injected into pages, and pages shown only once they call gapless.ready().
+    "web_scripts": ["web_script_check", "h264_1080p30", "web_ready_8s", "hevc_1080p30",
+                    "web_ready_never", "h264_720p30", "web_bbc_news", "vp9_1080p30",
+                    "web_guardian", "image_1920x1080_jpg", "web_wikipedia", "h264_1080p30"],
 }
 
 
@@ -480,9 +554,26 @@ def main():
     shutil.copy(os.path.join(ROOT, "samples", "web_timer.html"), args.out)
     assets.append(dict(id="web_timer", file="web_timer.html", mimeType="text/html",
                        durationMs=WEB_SECONDS * 1000))
+    site_extras = {
+        "web_bbc_news": dict(javaScript=HIDE_CONSENT_JS),
+        "web_guardian": dict(javaScript=HIDE_CONSENT_JS),
+        "web_cnn": dict(javaScript=HIDE_CONSENT_JS),
+        "web_accuweather": dict(javaScript=HIDE_CONSENT_JS),
+        "web_wikipedia": dict(javaScript=READY_AND_SCROLL_JS, waitForPageReady=True),
+    }
     for site, url, note in WEBSITES:
         assets.append(dict(id=site, uri=url, mimeType="text/html",
-                           durationMs=WEBSITE_SECONDS * 1000, note=note))
+                           durationMs=WEBSITE_SECONDS * 1000, note=note, **site_extras.get(site, {})))
+    # Local pages for the script and readiness features.
+    for name, page, extra in [
+        ("web_script_check", SCRIPT_CHECK_PAGE, dict(javaScript=SCRIPT_CHECK_JS)),
+        ("web_ready_8s", ready_page(8, True), dict(waitForPageReady=True)),
+        ("web_ready_never", ready_page(0, False), dict(waitForPageReady=True)),
+    ]:
+        with open(os.path.join(args.out, name + ".html"), "w") as fh:
+            fh.write(page)
+        assets.append(dict(id=name, file=name + ".html", mimeType="text/html",
+                           durationMs=WEB_SECONDS * 1000, **extra))
     broken = render_broken(args.out, wanted)
     broken_ids = [b["id"] for b in broken] + [v["id"] for v in VIDEOS if v.get("broken")]
     assets += broken
