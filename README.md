@@ -264,7 +264,10 @@ What still reaches you:
   decode on screen (out of memory, for example) also ends in `PlaybackError`, instead of a silent black screen.
 - `PreloadError` for an asset that failed to load. For web assets this includes a device with no usable
   WebView, and a WebView whose renderer process crashed; the library replaces the crashed WebView instead
-  of letting Android kill the app.
+  of letting Android kill the app. A page that doesn't paint within 5 seconds gets a quick script check:
+  if the renderer doesn't run it either, it has hung, so the library kills it, starts both web slots on a
+  fresh one and reports `PlaybackError` for the page instead of showing it. A hung renderer otherwise
+  stops painting every page while its memory keeps growing.
 
 Native crashes inside a vendor codec, and ANRs, can't be caught in-process. Run the player in its own
 process with a watchdog, as the sample app does, if that matters for your deployment.

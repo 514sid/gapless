@@ -351,6 +351,14 @@
       "durationMs": 6000,
       "note": "A host that never resolves",
       "broken": true
+    },
+    {
+      "id": "broken_hung_web",
+      "mimeType": "text/html",
+      "durationMs": 6000,
+      "note": "A script that never returns, so the WebView renderer hangs before it paints",
+      "broken": true,
+      "uri": "file:///android_asset/samples/broken_hung_web.html"
     }
   ],
   "playlists": {
@@ -491,6 +499,8 @@
       "h264_1080p30",
       "broken_unreachable_web",
       "h264_1080p30",
+      "broken_hung_web",
+      "h264_1080p30",
       "broken_hevc_444",
       "h264_1080p30",
       "broken_hevc_4320p",
@@ -511,6 +521,7 @@
       "broken_video_as_image",
       "broken_missing_web",
       "broken_unreachable_web",
+      "broken_hung_web",
       "broken_hevc_444",
       "broken_hevc_4320p"
     ]

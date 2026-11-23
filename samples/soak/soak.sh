@@ -52,14 +52,14 @@ launch
 LOGCAT_LOOP=$!
 trap 'kill $LOGCAT_LOOP 2>/dev/null; pkill -P $LOGCAT_LOOP 2>/dev/null' EXIT
 
-echo "time,uptime_s,player_pid,pss_kb,java_kb,native_kb,graphics_kb,threads,fds,cpu_jiffies,memavail_kb,swapfree_kb,load1,hal_rss_kb,swcodec_rss_kb" \
+echo "time,uptime_s,player_pid,pss_kb,java_kb,native_kb,graphics_kb,threads,fds,cpu_jiffies,memavail_kb,swapfree_kb,load1,hal_rss_kb,swcodec_rss_kb,renderer_kb" \
     > "$OUT/samples.csv"
 
 missing=0
 while [ "$(date +%s)" -lt "$END" ]; do
     if ! $A shell true >/dev/null 2>&1; then
         reconnect
-        echo "$(date +%s),,,,,,,,,,,,,," >> "$OUT/samples.csv"
+        echo "$(date +%s),,,,,,,,,,,,,,," >> "$OUT/samples.csv"
         log "device unreachable"
         sleep "$INTERVAL"
         continue
@@ -72,6 +72,9 @@ while [ "$(date +%s)" -lt "$END" ]; do
     load=$($A shell cat /proc/loadavg | awk '{print $1}')
     hal=$($A shell 'grep VmRSS /proc/$(pidof android.hardware.media.c2@1.1-mediatek)/status' 2>/dev/null | awk '{print $2}')
     sw=$($A shell 'grep VmRSS /proc/$(pidof media.swcodec)/status' 2>/dev/null | awk '{print $2}')
+    # The WebView renderer runs in its own process. RAM plus swap, since a hung one swaps out.
+    renderer=$($A shell 'grep -hE "VmRSS|VmSwap" /proc/$(pgrep -f webview:sandboxed_process | head -1)/status' \
+        2>/dev/null | awk '{s+=$2} END{if (NR) print s}')
     if [ -n "$pid" ]; then
         missing=0
         mi=$($A shell dumpsys meminfo "$pid" | tr -d '\r')
@@ -91,7 +94,7 @@ while [ "$(date +%s)" -lt "$END" ]; do
             missing=0
         fi
     fi
-    echo "$(date +%s),$uptime,$pid,$pss,$java,$native,$gfx,$threads,$fds,$cpu,$memavail,$swapfree,$load,$hal,$sw" \
+    echo "$(date +%s),$uptime,$pid,$pss,$java,$native,$gfx,$threads,$fds,$cpu,$memavail,$swapfree,$load,$hal,$sw,$renderer" \
         >> "$OUT/samples.csv"
     sleep "$INTERVAL"
 done
