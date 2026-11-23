@@ -221,7 +221,9 @@
       "uri": "https://en.wikipedia.org/wiki/Television",
       "mimeType": "text/html",
       "durationMs": 15000,
-      "note": "Plain article, light"
+      "note": "Plain article, light",
+      "javaScript": "window.addEventListener('load', function () {\n  if (window.gapless) gapless.ready();\n  setInterval(function () { window.scrollBy(0, 1); }, 20);\n});",
+      "waitForPageReady": true
     },
     {
       "id": "web_hacker_news",
@@ -235,28 +237,32 @@
       "uri": "https://www.bbc.com/news",
       "mimeType": "text/html",
       "durationMs": 15000,
-      "note": "News front page with a consent banner"
+      "note": "News front page with a consent banner",
+      "javaScript": "(function () {\n  var css = '[id^=\"sp_message_container\"], .fc-consent-root, #onetrust-consent-sdk,' +\n    ' #CybotCookiebotDialog, .qc-cmp2-container, #didomi-host, #usercentrics-root, #cmpbox,' +\n    ' #cmpbox2, .bbccookies-banner { display: none !important }' +\n    ' html, body { overflow: auto !important }';\n  var style = document.createElement('style');\n  style.textContent = css;\n  (document.head || document.documentElement).appendChild(style);\n})();"
     },
     {
       "id": "web_guardian",
       "uri": "https://www.theguardian.com/international",
       "mimeType": "text/html",
       "durationMs": 15000,
-      "note": "News front page, many images"
+      "note": "News front page, many images",
+      "javaScript": "(function () {\n  var css = '[id^=\"sp_message_container\"], .fc-consent-root, #onetrust-consent-sdk,' +\n    ' #CybotCookiebotDialog, .qc-cmp2-container, #didomi-host, #usercentrics-root, #cmpbox,' +\n    ' #cmpbox2, .bbccookies-banner { display: none !important }' +\n    ' html, body { overflow: auto !important }';\n  var style = document.createElement('style');\n  style.textContent = css;\n  (document.head || document.documentElement).appendChild(style);\n})();"
     },
     {
       "id": "web_cnn",
       "uri": "https://edition.cnn.com/",
       "mimeType": "text/html",
       "durationMs": 15000,
-      "note": "News front page, heavy scripts and ads"
+      "note": "News front page, heavy scripts and ads",
+      "javaScript": "(function () {\n  var css = '[id^=\"sp_message_container\"], .fc-consent-root, #onetrust-consent-sdk,' +\n    ' #CybotCookiebotDialog, .qc-cmp2-container, #didomi-host, #usercentrics-root, #cmpbox,' +\n    ' #cmpbox2, .bbccookies-banner { display: none !important }' +\n    ' html, body { overflow: auto !important }';\n  var style = document.createElement('style');\n  style.textContent = css;\n  (document.head || document.documentElement).appendChild(style);\n})();"
     },
     {
       "id": "web_accuweather",
       "uri": "https://www.accuweather.com/",
       "mimeType": "text/html",
       "durationMs": 15000,
-      "note": "Weather, ad-heavy"
+      "note": "Weather, ad-heavy",
+      "javaScript": "(function () {\n  var css = '[id^=\"sp_message_container\"], .fc-consent-root, #onetrust-consent-sdk,' +\n    ' #CybotCookiebotDialog, .qc-cmp2-container, #didomi-host, #usercentrics-root, #cmpbox,' +\n    ' #cmpbox2, .bbccookies-banner { display: none !important }' +\n    ' html, body { overflow: auto !important }';\n  var style = document.createElement('style');\n  style.textContent = css;\n  (document.head || document.documentElement).appendChild(style);\n})();"
     },
     {
       "id": "web_time_is",
@@ -327,6 +333,27 @@
       "mimeType": "text/html",
       "durationMs": 15000,
       "note": "Embedded video: the page needs a video decoder next to ExoPlayer's"
+    },
+    {
+      "id": "web_script_check",
+      "mimeType": "text/html",
+      "durationMs": 6000,
+      "javaScript": "window.gaplessScriptRan = true;\nvar style = document.createElement('style');\nstyle.textContent = '#banner { display: none !important }';\n(document.head || document.documentElement).appendChild(style);",
+      "uri": "file:///android_asset/samples/web_script_check.html"
+    },
+    {
+      "id": "web_ready_8s",
+      "mimeType": "text/html",
+      "durationMs": 6000,
+      "waitForPageReady": true,
+      "uri": "file:///android_asset/samples/web_ready_8s.html"
+    },
+    {
+      "id": "web_ready_never",
+      "mimeType": "text/html",
+      "durationMs": 6000,
+      "waitForPageReady": true,
+      "uri": "file:///android_asset/samples/web_ready_never.html"
     },
     {
       "id": "broken_truncated_mp4",
@@ -607,6 +634,20 @@
       "web_amazon",
       "web_youtube_embed"
     ],
+    "web_scripts": [
+      "web_script_check",
+      "h264_1080p30",
+      "web_ready_8s",
+      "hevc_1080p30",
+      "web_ready_never",
+      "h264_720p30",
+      "web_bbc_news",
+      "vp9_1080p30",
+      "web_guardian",
+      "image_1920x1080_jpg",
+      "web_wikipedia",
+      "h264_1080p30"
+    ],
     "all": [
       "h264_1080p30",
       "h264_1080p60",
@@ -648,7 +689,10 @@
       "web_github",
       "web_reddit",
       "web_amazon",
-      "web_youtube_embed"
+      "web_youtube_embed",
+      "web_script_check",
+      "web_ready_8s",
+      "web_ready_never"
     ],
     "broken": [
       "broken_truncated_mp4",

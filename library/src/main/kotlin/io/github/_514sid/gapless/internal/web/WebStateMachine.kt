@@ -6,6 +6,7 @@ import android.os.Build
 import android.util.Log
 import android.view.ViewGroup
 import android.webkit.CookieManager
+import android.webkit.JavascriptInterface
 import android.webkit.RenderProcessGoneDetail
 import android.webkit.WebChromeClient
 import android.webkit.WebResourceError
@@ -17,6 +18,9 @@ import androidx.annotation.MainThread
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.webkit.ScriptHandler
+import androidx.webkit.WebViewCompat
+import androidx.webkit.WebViewFeature
 import io.github._514sid.gapless.GaplessWebConfig
 import io.github._514sid.gapless.internal.PlaybackItem
 import kotlinx.coroutines.CancellationException
@@ -72,6 +76,22 @@ internal class WebStateMachine(
 
     /** The URL each slot was last asked to load, or null while it shows the blank page. */
     private val loadedUrls = arrayOfNulls<String>(2)
+
+    /** The page each slot is loading or showing, for its script and readiness; null when blank. */
+    private val slotItems = arrayOfNulls<PlaybackItem.Web>(2)
+
+    /** Per slot: the document-start script registered for its page, removed when the page goes. */
+    private val scriptHandlers = arrayOfNulls<ScriptHandler>(2)
+
+    /** Per slot: the page has painted. */
+    private val painted = BooleanArray(2)
+
+    /** Per slot: the page has called `gapless.ready()` since it started loading. */
+    private val pageReady = BooleanArray(2)
+
+    private val documentStartScripts: Boolean by lazy {
+        runCatching { WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT) }.getOrDefault(false)
+    }
 
     private var debuggingConfigured = false
 
@@ -138,11 +158,81 @@ internal class WebStateMachine(
         renderState = renderState.copy(webViewA = views[0], webViewB = views[1])
     }
 
-    private fun WebView.loadPage(url: String) {
+    private fun WebView.loadPage(item: PlaybackItem.Web) {
         val slot = slotOf(this)
-        if (slot >= 0) loadedUrls[slot] = url
-        post { loadUrl(url) }
+        if (slot >= 0) {
+            loadedUrls[slot] = item.url
+            setSlotItem(slot, item)
+        }
+        post { loadUrl(item.url) }
     }
+
+    /**
+     * Gives [slot] the script and readiness rules of [item], or none for a blank page. A document
+     * start script registered for the slot's previous page is removed first, so it can't run in
+     * the next one.
+     */
+    private fun setSlotItem(slot: Int, item: PlaybackItem.Web?) {
+        scriptHandlers[slot]?.remove()
+        scriptHandlers[slot] = null
+        slotItems[slot] = item
+        painted[slot] = false
+        pageReady[slot] = false
+        val view = views[slot] ?: return
+        val script = item?.javaScript ?: return
+        if (documentStartScripts) {
+            try {
+                scriptHandlers[slot] = WebViewCompat.addDocumentStartJavaScript(view, script, item.javaScriptOrigins)
+            } catch (e: IllegalArgumentException) {
+                // A malformed origin rule. The page plays without its script rather than not at all.
+                Log.e(TAG, "Can't add the script for ${item.assetId}: ${e.message}")
+            }
+        } else if (!scriptFallbackWarned) {
+            scriptFallbackWarned = true
+            Log.w(TAG, "This WebView can't run scripts at document start; they run once the page paints")
+        }
+    }
+
+    private var scriptFallbackWarned = false
+
+    /** Whether [url] is in one of [origins], as the document start script rules match it. */
+    private fun originAllowed(url: String, origins: Set<String>): Boolean {
+        if ("*" in origins) return true
+        val uri = runCatching { java.net.URI(url) }.getOrNull() ?: return false
+        val port = if (uri.port == -1) "" else ":${uri.port}"
+        return "${uri.scheme?.lowercase()}://${uri.host?.lowercase()}$port" in origins
+    }
+
+    /**
+     * [slot]'s page may be shown once it has painted and, if it asked to be waited for, called
+     * `gapless.ready()`. Only the hidden slot being prepared counts.
+     */
+    private fun maybeCommit(slot: Int) {
+        if (slot != inactiveSlot || !painted[slot]) return
+        if (slotItems[slot]?.waitForReady == true && !pageReady[slot]) return
+        pageCommitted = true
+        commitDeferred?.complete(Unit)
+    }
+
+    /** `gapless.ready()`, called by the page. Main thread. */
+    private fun onPageReady(view: WebView) {
+        val slot = slotOf(view)
+        if (slot < 0 || slotItems[slot] == null || pageReady[slot]) return
+        logDebug("${view.slotName()} page called gapless.ready()")
+        pageReady[slot] = true
+        maybeCommit(slot)
+    }
+
+    /** The `gapless` object pages see. Its calls arrive on a WebView thread. */
+    private inner class PageBridge(private val view: WebView) {
+        @JavascriptInterface
+        fun ready() {
+            // Not view.post(): that waits until the view is attached to a window.
+            mainHandler.post { onPageReady(view) }
+        }
+    }
+
+    private val mainHandler = android.os.Handler(android.os.Looper.getMainLooper())
 
     fun prepare(item: PlaybackItem.Web) {
         transitionJob?.cancel()
@@ -161,7 +251,7 @@ internal class WebStateMachine(
 
         val targetView = inactiveWebView ?: return
         logDebug("prepare(): Preloading URL into ${targetView.slotName()} -> ${item.url}")
-        targetView.loadPage(item.url)
+        targetView.loadPage(item)
     }
 
     fun play(item: PlaybackItem.Web) {
@@ -180,7 +270,7 @@ internal class WebStateMachine(
         if (pendingItem?.playbackId != item.playbackId) {
             Log.w(TAG, "play(): Item was NOT pending! Forcing immediate load.")
             commitDeferred = CompletableDeferred()
-            inactiveWebView?.loadPage(item.url)
+            inactiveWebView?.loadPage(item)
         }
 
         pendingItem = null
@@ -261,7 +351,7 @@ internal class WebStateMachine(
                 logDebug("Refresh triggered: Preloading ${item.url} into ${targetView.slotName()}")
                 commitDeferred = CompletableDeferred()
                 isRefreshing = true
-                targetView.loadPage(item.url)
+                targetView.loadPage(item)
 
                 try {
                     withTimeout(PAINT_TIMEOUT_MS) { commitDeferred?.await() }
@@ -359,6 +449,10 @@ internal class WebStateMachine(
         view.destroy()
         views[slot] = null
         loadedUrls[slot] = null
+        scriptHandlers[slot] = null // went with the destroyed WebView
+        slotItems[slot] = null
+        painted[slot] = false
+        pageReady[slot] = false
         try {
             views[slot] = createWebView(slot)
         } catch (e: Exception) {
@@ -402,10 +496,16 @@ internal class WebStateMachine(
                 super.onPageCommitVisible(view, url)
                 if (!url.startsWith("data:text/html")) {
                     logDebug("onPageCommitVisible(): ${view.slotName()} has successfully painted pixels! -> $url")
-                    if (view === inactiveWebView) {
-                        pageCommitted = true
-                        commitDeferred?.complete(Unit)
+                    val slot = slotOf(view)
+                    if (slot < 0) return
+                    val item = slotItems[slot]
+                    // Without document start scripts, this is the earliest the script can run.
+                    val script = item?.javaScript
+                    if (script != null && !documentStartScripts && originAllowed(url, item.javaScriptOrigins)) {
+                        view.evaluateJavascript(script, null)
                     }
+                    painted[slot] = true
+                    maybeCommit(slot)
                 }
             }
 
@@ -432,6 +532,9 @@ internal class WebStateMachine(
         }
 
         webChromeClient = WebChromeClient()
+
+        // gapless.ready(), for pages shown only once they say so (waitForPageReady).
+        addJavascriptInterface(PageBridge(this), "gapless")
 
         CookieManager.getInstance().setAcceptThirdPartyCookies(this, config.allowThirdPartyCookies)
 
@@ -465,7 +568,10 @@ internal class WebStateMachine(
 
     private fun WebView.loadBlank() {
         val slot = slotOf(this)
-        if (slot >= 0) loadedUrls[slot] = null
+        if (slot >= 0) {
+            loadedUrls[slot] = null
+            setSlotItem(slot, null)
+        }
         this.loadData(BLANK_PAGE, "text/html", "UTF-8")
     }
 }

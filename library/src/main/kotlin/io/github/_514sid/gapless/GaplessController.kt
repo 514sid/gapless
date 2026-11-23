@@ -438,6 +438,11 @@ public class GaplessController(
         require(asset.volume in 0f..1f) { "Asset \"${asset.id}\" volume ${asset.volume} is outside 0.0..1.0" }
         asset.durationMs?.let { require(it > 0) { "Asset \"${asset.id}\" durationMs must be positive" } }
         asset.refreshIntervalMs?.let { require(it > 0) { "Asset \"${asset.id}\" refreshIntervalMs must be positive" } }
+        asset.javaScriptOrigins?.let { origins ->
+            require(origins.isNotEmpty() && origins.none { it.isBlank() }) {
+                "Asset \"${asset.id}\" javaScriptOrigins must name at least one origin, or be null"
+            }
+        }
     }
 
     private fun toPlaybackItem(g: GaplessAsset): PlaybackItem {
@@ -454,10 +459,25 @@ public class GaplessController(
                 width = g.width ?: 1920,
                 height = g.height ?: 1080
             )
-            else -> PlaybackItem.Web(url = g.uri, refreshIntervalMs = g.refreshIntervalMs ?: 0L)
+            else -> PlaybackItem.Web(
+                url = g.uri,
+                refreshIntervalMs = g.refreshIntervalMs ?: 0L,
+                javaScript = g.javaScript?.takeIf { it.isNotBlank() },
+                javaScriptOrigins = g.javaScriptOrigins ?: defaultScriptOrigins(g.uri),
+                waitForReady = g.waitForPageReady,
+            )
         }
         item.assetId = g.id
         return item
+    }
+
+    /** The page's own origin for http and https pages; every origin for anything else. */
+    private fun defaultScriptOrigins(uri: String): Set<String> {
+        val parsed = runCatching { java.net.URI(uri) }.getOrNull()
+        val scheme = parsed?.scheme?.lowercase()
+        if (parsed?.host == null || (scheme != "http" && scheme != "https")) return setOf("*")
+        val port = if (parsed.port == -1) "" else ":${parsed.port}"
+        return setOf("$scheme://${parsed.host.lowercase()}$port")
     }
 
     private fun aspectRatioOf(width: Int?, height: Int?): Float? =

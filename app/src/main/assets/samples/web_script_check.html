@@ -1,0 +1,18 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><style>
+  html, body { margin: 0; height: 100%; color: #fff; font-family: sans-serif; overflow: hidden; }
+  .big { position: absolute; top: 30vh; width: 100%; text-align: center; font-size: 14vh; font-weight: bold; }
+  .small { position: absolute; top: 55vh; width: 100%; text-align: center; font-size: 4vh; }
+  .label { position: absolute; top: 3vh; left: 3vw; font-size: 4vh; }
+</style></head>
+<body style="background:#333">
+<div class="label">SCRIPT CHECK<br>web_script_check</div>
+<div class="big" id="result">?</div>
+<div class="small">the red cookie banner below should not appear</div>
+<div id="banner" style="position:absolute;bottom:0;width:100%;height:22vh;background:#c00;font-size:6vh;text-align:center;line-height:22vh">FAKE COOKIE BANNER</div>
+<script>
+  var ran = window.gaplessScriptRan === true;
+  document.body.style.background = ran ? '#063' : '#600';
+  document.getElementById('result').textContent = ran ? 'SCRIPT RAN FIRST' : 'NO SCRIPT';
+</script>
+</body></html>

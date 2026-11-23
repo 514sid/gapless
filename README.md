@@ -443,6 +443,53 @@ ServiceWorkerController.getInstance().apply {
 
 Without this, service workers will fail to make network requests and the page will appear to load but never display content.
 
+### Scripts in the page
+
+`javaScript` on a web asset runs in every document the page loads, before the page's own scripts
+and before anything is drawn. Styles it adds apply from the first paint, so a hidden cookie
+banner never flashes up. It runs again on each navigation and refresh.
+
+```kotlin
+GaplessAsset(
+    id = "news",
+    uri = "https://news.example.com",
+    mimeType = "text/html",
+    javaScript = """
+        const style = document.createElement('style');
+        style.textContent = '#cookie-banner { display: none !important } ::-webkit-scrollbar { display: none }';
+        (document.head || document.documentElement).appendChild(style);
+    """,
+)
+```
+
+At document start the page's elements don't exist yet, so act on them through CSS, a
+`MutationObserver`, or an event such as `load`. The script runs only in the page's own origin
+(scheme, host and port), so a redirect to a sign-in page elsewhere doesn't get it; set
+`javaScriptOrigins` to allow others, or `setOf("*")` for all. Pages that aren't http or https
+allow every origin by default. On WebView versions before 87, which can't run scripts that early,
+the script runs once the page first paints instead.
+
+### Showing a page only when it is ready
+
+A page is normally shown as soon as it first paints, which for a dashboard can be an empty frame
+while its data loads. With `waitForPageReady = true` it is shown when it calls `gapless.ready()`
+instead. The page can make the call itself, or a `javaScript` can, for example on `load`:
+
+```kotlin
+GaplessAsset(
+    id = "dashboard",
+    uri = "https://dashboard.example.com",
+    mimeType = "text/html",
+    waitForPageReady = true,
+    javaScript = "window.addEventListener('load', () => gapless.ready())",
+)
+```
+
+The page loads while the asset before it plays, so it is normally ready at its turn. A page that
+never calls `gapless.ready()` is shown anyway once `play()` stops waiting, the same as a page
+that never paints. Any page in the WebView can call `gapless.ready()`, but all it decides is when
+the page is shown.
+
 ---
 
 ## How It Works

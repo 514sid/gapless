@@ -19,6 +19,20 @@ package io.github._514sid.gapless
  * to this duration so it ends at a fixed point instead of playing its full natural length. The host still
  * drives the transition with [GaplessController.play]; if the clip reaches this end before then, it holds
  * on the last frame (it never auto-advances). VOD only; leave null for live streams.
+ * @property javaScript Web assets only: a script run in every document the page loads, before the
+ * page's own scripts and before anything is drawn, so styles it injects apply from the first paint.
+ * Use it to hide cookie banners or scrollbars, fit a page to the screen, or sign in. It runs again
+ * on every navigation and refresh. To act on elements that appear later, use a MutationObserver.
+ * On WebView versions too old to run scripts that early (before WebView 87), it runs once the page
+ * first paints instead.
+ * @property javaScriptOrigins The origins [javaScript] may run in, such as `https://example.com`,
+ * so a redirect to a sign-in page elsewhere doesn't get it. `*` allows every origin. Null, the
+ * default, allows the page's own origin for http and https pages and every origin otherwise.
+ * @property waitForPageReady Web assets only: the page isn't ready to be shown when it first paints
+ * but when it calls `gapless.ready()`, for example once a dashboard has loaded its data or a sign-in
+ * has finished. The page itself or [javaScript] can make the call. A page that never calls it is
+ * shown anyway when [GaplessController.play] times out waiting, as an unpainted page is. Any page
+ * in the WebView can call `gapless.ready()`, but it only ever decides when to show the page.
  */
 public data class GaplessAsset(
     val id: String,
@@ -29,6 +43,9 @@ public data class GaplessAsset(
     val refreshIntervalMs: Long? = null,
     val volume: Float = 0f,
     val durationMs: Long? = null,
+    val javaScript: String? = null,
+    val javaScriptOrigins: Set<String>? = null,
+    val waitForPageReady: Boolean = false,
 ) {
     private companion object {
         const val MIME_PREFIX_VIDEO = "video/"
