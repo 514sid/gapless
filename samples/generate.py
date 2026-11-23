@@ -390,6 +390,33 @@ def render_broken(out_dir, wanted):
     return entries
 
 
+# Real websites, loaded live, to see how the web player copes with what people actually put on
+# screens: news with ads and consent banners, WebGL maps and 3D, dashboards, an embedded YouTube
+# video that needs a decoder of its own, and light pages for contrast. They need a network and
+# change without notice, so they test behaviour, not exact output.
+WEBSITE_SECONDS = 15
+WEBSITES = [
+    ("web_wikipedia", "https://en.wikipedia.org/wiki/Television", "Plain article, light"),
+    ("web_hacker_news", "https://news.ycombinator.com/", "Plain HTML, very light"),
+    ("web_bbc_news", "https://www.bbc.com/news", "News front page with a consent banner"),
+    ("web_guardian", "https://www.theguardian.com/international", "News front page, many images"),
+    ("web_cnn", "https://edition.cnn.com/", "News front page, heavy scripts and ads"),
+    ("web_accuweather", "https://www.accuweather.com/", "Weather, ad-heavy"),
+    ("web_time_is", "https://time.is/", "Live clock, updates every second"),
+    ("web_windy", "https://www.windy.com/", "WebGL weather map with animated wind"),
+    ("web_osm", "https://www.openstreetmap.org/#map=12/51.5074/-0.1278", "Tiled map"),
+    ("web_google_maps", "https://www.google.com/maps/@51.5074,-0.1278,13z", "Heavy map app"),
+    ("web_threejs", "https://threejs.org/examples/webgl_animation_keyframes.html",
+     "WebGL 3D animation"),
+    ("web_grafana", "https://play.grafana.org/", "Dashboard with live charts"),
+    ("web_github", "https://github.com/514sid/gapless", "Repository page"),
+    ("web_reddit", "https://www.reddit.com/r/television/", "Infinite feed, heavy scripts"),
+    ("web_amazon", "https://www.amazon.com/", "Shop front page, heavy"),
+    ("web_youtube_embed", "https://www.youtube.com/embed/aqz-KE-bpKQ?autoplay=1&mute=1",
+     "Embedded video: the page needs a video decoder next to ExoPlayer's"),
+]
+
+
 # Playlists. The sample app plays one in a loop.
 
 PLAYLISTS = {
@@ -415,6 +442,11 @@ PLAYLISTS = {
     ],
     # For two players side by side: each half of a 1080p screen is under 720p anyway.
     "split_720p": ["h264_720p30", "hevc_720p30", "vp9_720p30"],
+    # Every website once, with a video or image between them so each cut also switches players.
+    "websites": [x for i, (site, _, _) in enumerate(WEBSITES)
+                 for x in (site, ["h264_1080p30", "image_1920x1080_jpg", "hevc_1080p30",
+                                  "vp9_1080p30"][i % 4])],
+    "websites_only": [site for site, _, _ in WEBSITES],
 }
 
 
@@ -448,6 +480,9 @@ def main():
     shutil.copy(os.path.join(ROOT, "samples", "web_timer.html"), args.out)
     assets.append(dict(id="web_timer", file="web_timer.html", mimeType="text/html",
                        durationMs=WEB_SECONDS * 1000))
+    for site, url, note in WEBSITES:
+        assets.append(dict(id=site, uri=url, mimeType="text/html",
+                           durationMs=WEBSITE_SECONDS * 1000, note=note))
     broken = render_broken(args.out, wanted)
     broken_ids = [b["id"] for b in broken] + [v["id"] for v in VIDEOS if v.get("broken")]
     assets += broken

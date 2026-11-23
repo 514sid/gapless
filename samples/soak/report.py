@@ -68,9 +68,11 @@ def main():
             last_pid = r["player_pid"]
     unreachable = len(rows) - len(reachable)
     no_player = sum(1 for r in reachable if not r["player_pid"])
+    off_screen = sum(1 for r in reachable if r.get("on_screen") == "0")
 
     started, errors, preload_errors, missed = Counter(), defaultdict(Counter), defaultdict(Counter), Counter()
-    hard_cuts, crashes, anrs, lmk_kills = 0, [], 0, 0
+    hard_cuts, crashes, anrs, lmk_kills = 0, [], 0, Counter()
+    fatal_at = None  # A FATAL EXCEPTION line waiting for the "Process:" line that names the app.
     starts = []  # (start time, asset id)
     failures = []  # times of errors, which hold the schedule up on purpose
     log_path = os.path.join(run, "logcat.txt")
@@ -98,12 +100,16 @@ def main():
         elif tag == "GaplessVideo" and "trying hard cuts" in msg:
             hard_cuts += 1
         elif tag == "AndroidRuntime" and "FATAL EXCEPTION" in msg:
-            crashes.append(f"{day} {clock}")
+            fatal_at = f"{day} {clock}"
+        elif tag == "AndroidRuntime" and fatal_at and msg.startswith("Process: "):
+            if msg.startswith("Process: io.github.gapless"):  # Other apps crash too.
+                crashes.append(fatal_at)
+            fatal_at = None
         elif tag == "ActivityManager" and "ANR in io.github.gapless" in msg:
             anrs += 1
         elif ("lowmemorykiller" in tag or tag == "lmkd" or tag == "ActivityManager") \
                 and "io.github.gapless" in msg and ("Kill" in msg or "kill" in msg):
-            lmk_kills += 1
+            lmk_kills["player" if ":player" in msg else "main"] += 1
 
     # The hold at a video cut: how long after a clip's scheduled end the next one began. Cuts with
     # a failure in between are left out: the schedule waits a second before skipping on purpose.
@@ -131,9 +137,11 @@ def main():
     p("")
     p(f"- Device reboots: {reboots}")
     p(f"- Player process restarts: {restarts}")
-    p(f"- Samples with the device unreachable: {unreachable}; with no player running: {no_player}")
+    p(f"- Samples with the device unreachable: {unreachable}; with no player running: {no_player}"
+      + (f"; with the player not on screen: {off_screen}" if "on_screen" in rows[0] else ""))
     p(f"- Crashes (FATAL EXCEPTION): {len(crashes)}" + (f", at {', '.join(crashes[:10])}" if crashes else ""))
-    p(f"- ANRs: {anrs}; low-memory kills of the app: {lmk_kills}")
+    p(f"- ANRs: {anrs}; low-memory kills of the player process: {lmk_kills['player']}, "
+      f"of the main process (launcher and watchdog): {lmk_kills['main']}")
     p(f"- Switches to hard cuts: {hard_cuts}")
     events = os.path.join(run, "events.txt")
     if os.path.exists(events):

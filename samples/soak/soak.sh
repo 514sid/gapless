@@ -4,8 +4,8 @@
 #   samples/soak/soak.sh [hours] [interval-seconds]
 #
 # Defaults: 24 hours, a sample every 300 seconds. Set ANDROID_SERIAL to pick the device (an
-# ip:port is reconnected if it drops) and SOAK_EXTRAS for extra launch extras, for example
-# SOAK_EXTRAS="--ef volume 1". Writes into soak-<date>/ in the current directory, then runs
+# ip:port is reconnected if it drops), SOAK_PLAYLIST for another playlist than "soak", and
+# SOAK_EXTRAS for extra launch extras, for example SOAK_EXTRAS="--ef volume 1". Writes into soak-<date>/ in the current directory, then runs
 # report.py on it. Keep the computer awake and on the same network as the device.
 
 set -u
@@ -13,6 +13,7 @@ HOURS=${1:-24}
 INTERVAL=${2:-300}
 SERIAL=${ANDROID_SERIAL:-$(adb devices | awk 'NR>1 && $2=="device"{print $1; exit}')}
 EXTRAS=${SOAK_EXTRAS:-"--ef volume 0"}
+PLAYLIST=${SOAK_PLAYLIST:-soak}
 PKG=io.github.gapless.sample
 HERE=$(cd "$(dirname "$0")" && pwd)
 OUT=${SOAK_OUT:-soak-$(date +%Y%m%d-%H%M)}
@@ -29,20 +30,22 @@ reconnect() {
 
 launch() {
     # shellcheck disable=SC2086
-    $A shell am start -S -n $PKG/.MainActivity --es playlist soak $EXTRAS >/dev/null 2>&1
+    $A shell am start -S -n $PKG/.MainActivity --es playlist "$PLAYLIST" $EXTRAS >/dev/null 2>&1
 }
 
 # Keep the computer awake for as long as this script runs (macOS).
 command -v caffeinate >/dev/null && caffeinate -i -w $$ &
 
-log "soak start: $HOURS h, sample every ${INTERVAL}s, device $SERIAL, extras: $EXTRAS"
+# Lets the sample app's watchdog reopen the player from the background after a kill.
+$A shell appops set $PKG SYSTEM_ALERT_WINDOW allow
+log "soak start: $HOURS h, sample every ${INTERVAL}s, device $SERIAL, playlist $PLAYLIST, extras: $EXTRAS"
 $A logcat -c
 launch
 
 # The player's logs, restarted whenever adb drops.
 (
     while [ "$(date +%s)" -lt "$END" ]; do
-        $A logcat -v time GaplessPlayer:V GaplessVideo:V AndroidRuntime:E ActivityManager:I \
+        $A logcat -v time GaplessPlayer:V GaplessVideo:V WebStateMachine:W AndroidRuntime:E ActivityManager:I \
             lowmemorykiller:V lmkd:V '*:S' >> "$OUT/logcat.txt" 2>/dev/null
         echo "--- logcat ended $(date '+%F %T')" >> "$OUT/logcat.txt"
         sleep 10
@@ -52,14 +55,14 @@ launch
 LOGCAT_LOOP=$!
 trap 'kill $LOGCAT_LOOP 2>/dev/null; pkill -P $LOGCAT_LOOP 2>/dev/null' EXIT
 
-echo "time,uptime_s,player_pid,pss_kb,java_kb,native_kb,graphics_kb,threads,fds,cpu_jiffies,memavail_kb,swapfree_kb,load1,hal_rss_kb,swcodec_rss_kb,renderer_kb" \
+echo "time,uptime_s,player_pid,pss_kb,java_kb,native_kb,graphics_kb,threads,fds,cpu_jiffies,memavail_kb,swapfree_kb,load1,hal_rss_kb,swcodec_rss_kb,renderer_kb,on_screen" \
     > "$OUT/samples.csv"
 
 missing=0
 while [ "$(date +%s)" -lt "$END" ]; do
     if ! $A shell true >/dev/null 2>&1; then
         reconnect
-        echo "$(date +%s),,,,,,,,,,,,,,," >> "$OUT/samples.csv"
+        echo "$(date +%s),,,,,,,,,,,,,,,," >> "$OUT/samples.csv"
         log "device unreachable"
         sleep "$INTERVAL"
         continue
@@ -73,10 +76,25 @@ while [ "$(date +%s)" -lt "$END" ]; do
     hal=$($A shell 'grep VmRSS /proc/$(pidof android.hardware.media.c2@1.1-mediatek)/status' 2>/dev/null | awk '{print $2}')
     sw=$($A shell 'grep VmRSS /proc/$(pidof media.swcodec)/status' 2>/dev/null | awk '{print $2}')
     # The WebView renderer runs in its own process. RAM plus swap, since a hung one swaps out.
-    renderer=$($A shell 'grep -hE "VmRSS|VmSwap" /proc/$(pgrep -f webview:sandboxed_process | head -1)/status' \
+    renderer=$($A shell 'for p in $(pgrep -f webview:sandboxed_process); do grep -hE "VmRSS|VmSwap" /proc/$p/status; done' \
         2>/dev/null | awk '{s+=$2} END{if (NR) print s}')
-    if [ -n "$pid" ]; then
+    # The process alone isn't enough: Android restarts :player for its service without the activity.
+    if $A shell dumpsys activity activities 2>/dev/null | grep -q "topResumedActivity=.*$PKG/.PlayerActivity"; then
+        shown=1
+    else
+        shown=0
+    fi
+    if [ "$shown" = 1 ]; then
         missing=0
+    else
+        missing=$((missing + 1))
+        if [ "$missing" -ge 2 ]; then
+            log "player not on screen for two samples; relaunching"
+            launch
+            missing=0
+        fi
+    fi
+    if [ -n "$pid" ]; then
         mi=$($A shell dumpsys meminfo "$pid" | tr -d '\r')
         pss=$(echo "$mi" | awk '/TOTAL PSS:/{print $3; exit}')
         java=$(echo "$mi" | awk '/Java Heap:/{print $3; exit}')
@@ -87,14 +105,8 @@ while [ "$(date +%s)" -lt "$END" ]; do
         cpu=$($A shell "cat /proc/$pid/stat" | awk '{print $14+$15}')
     else
         pss= java= native= gfx= threads= fds= cpu=
-        missing=$((missing + 1))
-        if [ "$missing" -ge 2 ]; then
-            log "player not running for two samples; relaunching"
-            launch
-            missing=0
-        fi
     fi
-    echo "$(date +%s),$uptime,$pid,$pss,$java,$native,$gfx,$threads,$fds,$cpu,$memavail,$swapfree,$load,$hal,$sw,$renderer" \
+    echo "$(date +%s),$uptime,$pid,$pss,$java,$native,$gfx,$threads,$fds,$cpu,$memavail,$swapfree,$load,$hal,$sw,$renderer,$shown" \
         >> "$OUT/samples.csv"
     sleep "$INTERVAL"
 done

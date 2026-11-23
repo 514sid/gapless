@@ -48,6 +48,8 @@ With no extra, the app plays `mixed`. The playlist in use, and whether 4K is on,
 | `portrait` | A 1080x1920 clip and image |
 | `split_720p` | H.264, HEVC and VP9 at 720p, for two players side by side (`--ei players 2`) |
 | `soak` | A two-minute loop of every working codec, frame rate and image type, the web page, short clips back to back and three broken assets, for long runs |
+| `websites` | 16 real websites, 15 seconds each, with a video or image between them (needs a network) |
+| `websites_only` | The same websites back to back |
 | `all` | Every working asset |
 | `broken` | Each broken asset followed by `h264_1080p30`, so you see the player recover |
 | `broken_only` | Only the broken assets |
@@ -86,6 +88,8 @@ Each is shown for 4 seconds: JPEG, PNG and WebP at 1920x1080, a 1080x1920 portra
 
 `web_timer` is a local page with a running timer, a frame strip and a sweeping bar, driven by `requestAnimationFrame`.
 
+The `web_*` entries other than `web_timer` are live websites, loaded over the network: news front pages with ads and consent banners (BBC, the Guardian, CNN, AccuWeather), WebGL (Windy, three.js), maps (OpenStreetMap, Google Maps), a Grafana dashboard, a live clock (time.is), GitHub, Reddit, Amazon, light pages (Wikipedia, Hacker News) and an embedded YouTube video, which needs a video decoder next to ExoPlayer's. They change without notice, so they test how the player copes, not exact output. On a TV with about 1 GB of RAM, heavy sites take 200 to 300 MB in the WebView renderer, run the device out of memory within half an hour, and hold video frames for about half a second around each cut while they load.
+
 ### Broken
 
 Each of these should end in a `PlaybackError` or `PreloadError` (or, for some, play partly), and the player should carry on with the next asset. None should crash the app or leave the screen stuck.
@@ -112,7 +116,7 @@ Each of these should end in a `PlaybackError` or `PreloadError` (or, for some, p
 
 ## Soak test
 
-`soak/soak.sh` plays the `soak` playlist on a device for hours and records how it holds up:
+`soak/soak.sh` plays the `soak` playlist (or `SOAK_PLAYLIST`) on a device for hours and records how it holds up:
 
 ```sh
 samples/soak/soak.sh 24 300
@@ -121,8 +125,8 @@ samples/soak/soak.sh 24 300
 The arguments are the length in hours (24 by default) and the seconds between samples (300). It keeps the computer awake with `caffeinate` and writes into `soak-<date>/` in the current directory:
 
 - `logcat.txt`: the player's logs, reconnecting if adb drops.
-- `samples.csv`: every interval, the device's uptime, the player's process id, its memory (total, Java, native, graphics), threads, open files and CPU time, system free memory and swap, load, and the codec processes' memory.
-- `events.txt`: start, end, and anything the script did, such as relaunching the app after the player was gone for two samples.
+- `samples.csv`: every interval, the device's uptime, the player's process id, its memory (total, Java, native, graphics), threads, open files and CPU time, system free memory and swap, load, the codec processes' memory, the WebView renderer's memory including swap, and whether the player is on screen.
+- `events.txt`: start, end, and anything the script did, such as relaunching the app after the player was off screen for two samples. It checks the screen rather than the process: Android restarts the `:player` process for its service without bringing the activity back.
 
 When the run ends it writes `summary.md` with `soak/report.py`, which you can also run on a run in progress:
 
@@ -130,7 +134,7 @@ When the run ends it writes `summary.md` with `soak/report.py`, which you can al
 python3 samples/soak/report.py soak-20261122-2114
 ```
 
-The summary covers reboots, restarts, crashes, ANRs and low-memory kills, starts and errors per asset (flagging errors on working assets), the hold at each video cut, and the first, last, highest and hourly trend of every resource. Set `ANDROID_SERIAL` to pick the device and `SOAK_EXTRAS` for launch extras, for example `SOAK_EXTRAS="--ef volume 1"`. The computer has to stay on and on the device's network for the whole run.
+The summary covers reboots, restarts, crashes, ANRs and low-memory kills, starts and errors per asset (flagging errors on working assets), the hold at each video cut, and the first, last, highest and hourly trend of every resource. Set `ANDROID_SERIAL` to pick the device, `SOAK_PLAYLIST` to play another playlist, for example `SOAK_PLAYLIST=websites`, and `SOAK_EXTRAS` for launch extras, for example `SOAK_EXTRAS="--ef volume 1"`. The script grants the app permission to draw over other apps, so its watchdog can reopen the player after a kill. The computer has to stay on and on the device's network for the whole run.
 
 ## Regenerating
 

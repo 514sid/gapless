@@ -351,6 +351,8 @@ app process                           :player process
 
 - A crash in the player (ExoPlayer, WebView, Coil) cannot take down the watchdog.
 - The watchdog (`WatchdogService`) is a foreground service in the main process. It holds a Binder to `PlayerService` in `:player`. When `:player` dies, `onServiceDisconnected` fires and the watchdog automatically restarts both the service and the activity.
+- Android 10 and later block activity starts from the background, so the watchdog can only reopen the player if the app may draw over other apps: `adb shell appops set io.github.gapless.sample SYSTEM_ALERT_WINDOW allow`. Without it, tapping the watchdog's notification brings the player back.
+- When the system kills the main process for memory, it restarts the watchdog with its original launch extras, so the player comes back on the same playlist. Android delays that restart, by up to several minutes after repeated kills, and the main process ranks below the player when memory runs out. On a device that runs out of memory often, make the player the home app instead, which Android restarts at once.
 - `PlayerActivity` uses `singleInstance` launch mode, so only one player instance ever exists.
 - `MainActivity` immediately calls `finish()` after starting the watchdog. It has no logic of its own.
 

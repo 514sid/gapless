@@ -13,6 +13,7 @@ import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.Bundle
 import android.os.IBinder
+import android.provider.Settings
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
@@ -64,7 +65,9 @@ class WatchdogService : Service() {
 
         ServiceCompat.startForeground(this, NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
         launchPlayer()
-        return START_STICKY
+        // Redelivered after the system kills this process, so the restarted player gets the same
+        // playlist. START_STICKY would restart it with a null intent and lose the extras.
+        return START_REDELIVER_INTENT
     }
 
     override fun onBind(intent: Intent): IBinder? = null
@@ -77,9 +80,13 @@ class WatchdogService : Service() {
     private fun launchPlayer() {
         startService(Intent(this, PlayerService::class.java))
         bindService(Intent(this, PlayerService::class.java), playerConnection, BIND_AUTO_CREATE)
-        // FLAG_ACTIVITY_NEW_TASK required from non-Activity context.
-        // On Android 12+ the OS may suppress background activity starts; in that case
-        // tapping the persistent notification brings the player back.
+        // Android 10+ blocks activity starts from the background, which this is once the player
+        // is gone, unless the app may draw over other apps. Without that, tapping the persistent
+        // notification is the only way back.
+        if (!Settings.canDrawOverlays(this)) {
+            Log.w(TAG, "Can't reopen the player from the background; grant it with " +
+                "adb shell appops set $packageName SYSTEM_ALERT_WINDOW allow")
+        }
         startActivity(playerIntent())
     }
 
