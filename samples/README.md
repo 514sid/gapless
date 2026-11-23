@@ -34,6 +34,7 @@ adb shell am start -S -n io.github.gapless.sample/.MainActivity --es playlist co
 - `--ez fallback true` turns on `GaplessVideoConfig.enableDecoderFallback` (off by default), so a decoder that can't open falls back to a software one instead of failing.
 - `--ei players 2` shows two players side by side, each with its own controller and schedule. The right one plays the same list shifted by one clip and is muted; `--es playlist2 <name>` or `--es ids2 a,b,c` give it its own list and `--ef volume2 1` unmutes it. Each player holds two decoders, so two players need four. On a TV with two hardware decoders, each player then switches to hard cuts, or with `--ez fallback true` the rest decode in software, which is why `split_720p` exists.
 - `--ez uhd false` leaves out videos larger than 1920x1080 (the two 4K clips), for devices that only decode Full HD. `--ez uhd true` keeps them. Without the extra, the app keeps them only if the display has a mode above 1920x1080. Images and broken assets are never left out, so `broken_hevc_4320p` still tests a clip the decoder can't take.
+- `--es sync leader` or `--es sync <leader address>` plays in step with other devices on the LAN; see [Synced playback](#synced-playback).
 
 With no extra, the app plays `mixed`. The playlist in use, and whether 4K is on, is logged under the `GaplessPlayer` tag.
 
@@ -113,6 +114,37 @@ Each of these should end in a `PlaybackError` or `PreloadError` (or, for some, p
 | `broken_missing_web` | A page that isn't in the APK |
 | `broken_unreachable_web` | `https://unreachable.invalid/`, a host that never resolves |
 | `broken_hung_web` | A script that never returns, so the WebView renderer hangs before it paints |
+
+## Synced playback
+
+Two or more devices on the same network can play one playlist in step, as for a video wall or screens side by side. Start the leader first; it picks the playlist for everyone:
+
+```sh
+adb -s <leader> shell am start -S -n io.github.gapless.sample/.MainActivity --es sync leader --es playlist mixed --ez clock true
+adb -s <follower> shell am start -S -n io.github.gapless.sample/.MainActivity --es sync <leader address> --ez clock true
+```
+
+The devices agree on a clock over UDP port 47800: each follower asks the leader for its time about once a second and keeps the exchange with the shortest round trip, as NTP does, and the leader's reply also carries the playlist and when its first slot starts. From then on each device works out the same schedule on its own (slot n starts at the session start plus the durations before it), stages the next asset while the current one plays, and cuts to it when its slot starts. No messages are sent per cut, so a follower that drops off the network keeps playing in step for as long as the clocks agree, and one that starts late joins at the next slot. A failed asset isn't skipped; the device waits for the next slot like the others. Both clocks are monotonic, so the TV correcting its wall clock doesn't move the schedule.
+
+With `--ez clock true` each screen shows the shared clock and how late its last cut was. To measure, log both devices and compare:
+
+```sh
+adb -s <leader> logcat -v time GaplessSync:V GaplessTimeline:D '*:S' > leader.txt
+adb -s <follower> logcat -v time GaplessSync:V GaplessTimeline:D '*:S' > follower.txt
+python3 samples/sync/compare.py leader.txt follower.txt
+```
+
+Every slot is logged with how late its asset appeared against the shared schedule; the script pairs the slots up and prints how far apart the devices were, overall and for video, images and web pages.
+
+The clock sync and the schedule are the sample app's own code, an example of what a host can build. Videos are played with their slot's start time through the library's experimental `play(asset, startAtMs)`, which keeps each clip on the shared schedule while it plays: a late start catches up, and drift between the devices' clocks is corrected. See "Synced playback (experimental)" in the main README.
+
+Two more extras are for testing it. `--ez anchor false` plays the videos without start times, for comparison. `--ei lateMs 150` makes a device cut that much after each slot starts, to see it catch up. To measure how far apart the pictures are during clips, not only at the cuts, turn on the library's timeline log on each device before starting:
+
+```sh
+adb -s <device> shell setprop log.tag.GaplessTimeline DEBUG
+```
+
+and add `GaplessTimeline:D` to the logcat filters above. `compare.py` then adds a section for it.
 
 ## Soak test
 

@@ -41,6 +41,8 @@ android {
 kotlin {
     // Public declarations must state their visibility, so internals can't leak into the API by accident.
     explicitApi()
+    // The library itself uses its experimental API freely; only callers have to opt in.
+    compilerOptions { optIn.add("io.github._514sid.gapless.ExperimentalGaplessApi") }
 }
 
 /** The Android runtime jar Robolectric runs on, resolved by Gradle. See the test task below. */

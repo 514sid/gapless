@@ -18,7 +18,10 @@ internal sealed class PlaybackItem {
         val aspectRatioHint: Float? = null,
         val volume: Float = 0f,
         val durationMs: Long? = null,
-    ) : PlaybackItem()
+    ) : PlaybackItem() {
+        /** Set at play time when the host gave a start time; null plays unanchored. */
+        @Volatile var timeline: VideoTimeline? = null
+    }
 
     data class Image(
         val model: Any,

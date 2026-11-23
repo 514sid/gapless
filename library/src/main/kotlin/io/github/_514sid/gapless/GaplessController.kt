@@ -2,6 +2,7 @@ package io.github._514sid.gapless
 
 import io.github._514sid.gapless.internal.PlaybackItem
 import io.github._514sid.gapless.internal.PlayerCommand
+import io.github._514sid.gapless.internal.VideoTimeline
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -44,6 +45,23 @@ public class GaplessController(
     public val preloadMs: Long = 2_000L,
     public val readyTimeoutMs: Long = 10_000L,
 ) {
+    /** The clock start times given to [play] are on. */
+    private var clock: GaplessClock = GaplessClock.Wall
+
+    /**
+     * A controller whose [play] start times are given on [clock], such as a clock synchronized
+     * between devices that play in step. Experimental: see [ExperimentalGaplessApi].
+     */
+    @ExperimentalGaplessApi
+    public constructor(
+        scope: CoroutineScope,
+        preloadMs: Long = 2_000L,
+        readyTimeoutMs: Long = 10_000L,
+        clock: GaplessClock,
+    ) : this(scope, preloadMs, readyTimeoutMs) {
+        this.clock = clock
+    }
+
     private val commandChannel = Channel<PlayerCommand>(Channel.UNLIMITED)
     internal val commands = commandChannel.receiveAsFlow()
 
@@ -70,7 +88,7 @@ public class GaplessController(
     private sealed interface Intent {
         data class Start(val asset: GaplessAsset) : Intent
         data class PrepareNext(val asset: GaplessAsset) : Intent
-        data class Play(val asset: GaplessAsset) : Intent
+        data class Play(val asset: GaplessAsset, val startAtMs: Long?) : Intent
         data class ReadyToPlay(val asset: GaplessAsset, val item: PlaybackItem, val generation: Long) : Intent
         data object Stop : Intent
         data class PreloadMissed(val assetId: String, val elapsedMs: Long) : Intent
@@ -139,7 +157,28 @@ public class GaplessController(
      */
     public fun play(asset: GaplessAsset) {
         validateAsset(asset)
-        intents.trySend(Intent.Play(asset))
+        intents.trySend(Intent.Play(asset, null))
+    }
+
+    /**
+     * Cuts to [asset] like [play], and keeps a video on a timeline for as long as it plays.
+     * Experimental: see [ExperimentalGaplessApi].
+     *
+     * @param startAtMs For video: when the clip's position should be zero, on the controller's
+     * clock (the [GaplessClock] given to the constructor, otherwise the wall clock). A clip that
+     * started late plays up to 5% faster until it has caught up, over about two seconds; one that
+     * drifts from the clock is sped up or slowed down by a fraction of a percent; one that is off
+     * by more than half a second seeks. A speed-up never asks the decoder for more than 60 frames
+     * a second, so a 60 fps clip is only ever slowed down, and a clip that stalls while sped up
+     * isn't sped up again. This is how devices sharing a clock stay in step. Ignored for images and
+     * web pages, which have no timeline of their own: call [play] at the moment they should appear.
+     * @throws IllegalArgumentException if [asset] fails validation (blank id or uri, unsupported
+     * mimeType, volume outside 0..1, non-positive durationMs or refreshIntervalMs).
+     */
+    @ExperimentalGaplessApi
+    public fun play(asset: GaplessAsset, startAtMs: Long) {
+        validateAsset(asset)
+        intents.trySend(Intent.Play(asset, startAtMs))
     }
 
     /** Stops playback and forgets the current and staged assets. [start] resumes. */
@@ -182,7 +221,7 @@ public class GaplessController(
         when (intent) {
             is Intent.Start -> handleStart(intent.asset)
             is Intent.PrepareNext -> stagePrepare(intent.asset)
-            is Intent.Play -> handlePlay(intent.asset)
+            is Intent.Play -> handlePlay(intent.asset, intent.startAtMs)
             is Intent.ReadyToPlay -> {
                 if (intent.generation == generation) commitPlay(intent.asset, intent.item)
             }
@@ -228,12 +267,13 @@ public class GaplessController(
         _events.tryEmit(GaplessEvent.Preloading(asset))
     }
 
-    private fun handlePlay(asset: GaplessAsset) {
+    private fun handlePlay(asset: GaplessAsset, startAtMs: Long?) {
         generation++
         transitionJob?.cancel()
 
         val prepared = preparedItem?.takeIf { preparedAsset?.id == asset.id }
         if (prepared != null) {
+            prepared.anchor(startAtMs)
             // Already staged: swap synchronously so the Play command is enqueued before anything
             // the resulting Started event causes the host to issue (e.g. prepareNext of the next asset).
             commitPlay(asset, prepared)
@@ -243,6 +283,7 @@ public class GaplessController(
         // Not staged yet: prepare it now and wait until it can render before swapping, so we never
         // cut to a black or unbuffered surface.
         val item = toPlaybackItem(asset).also { it.preparedAt = System.currentTimeMillis() }
+        item.anchor(startAtMs)
         preparedAsset = asset
         preparedItem = item
         commandChannel.trySend(PlayerCommand.Prepare(item))
@@ -364,6 +405,11 @@ public class GaplessController(
         pendingShow = null
         showTimeoutJob?.cancel()
         showTimeoutJob = null
+    }
+
+    /** Puts a video on [clock]'s timeline from [startAtMs]; null plays it unanchored. */
+    private fun PlaybackItem.anchor(startAtMs: Long?) {
+        if (this is PlaybackItem.Video) timeline = startAtMs?.let { VideoTimeline(clock, it) }
     }
 
     private fun assetForId(assetId: String): GaplessAsset? = when (assetId) {

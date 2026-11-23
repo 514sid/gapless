@@ -38,8 +38,12 @@ class GaplessControllerTest {
     private val readyTimeoutMs = 10_000L
 
     /** A controller wired to a fake player that records commands and events. */
-    private inner class Harness(scope: TestScope, val autoShow: Boolean = true) {
-        val controller = GaplessController(scope.backgroundScope, preloadMs, readyTimeoutMs)
+    private inner class Harness(
+        scope: TestScope,
+        val autoShow: Boolean = true,
+        clock: GaplessClock = GaplessClock.Wall,
+    ) {
+        val controller = GaplessController(scope.backgroundScope, preloadMs, readyTimeoutMs, clock)
         val commands = mutableListOf<PlayerCommand>()
         val events = mutableListOf<GaplessEvent>()
         val ready = mutableSetOf<UUID>()
@@ -375,6 +379,49 @@ class GaplessControllerTest {
 
         assertNull(h.current)
         assertTrue(h.plays.isEmpty())
+    }
+
+    // Start times
+
+    @Test
+    fun `a staged video played with a start time gets the controller's clock and that time`() = runTest {
+        val clock = GaplessClock { 42L }
+        val h = Harness(this, clock = clock)
+        runCurrent()
+        h.controller.start(video("a"))
+        settle()
+        h.controller.prepareNext(video("b"))
+        runCurrent()
+
+        h.controller.play(video("b"), startAtMs = 5_000L)
+        runCurrent()
+
+        val timeline = (h.plays.last() as PlaybackItem.Video).timeline!!
+        assertSame(clock, timeline.clock)
+        assertEquals(5_000L, timeline.startAtMs)
+        assertEquals(42L - 5_000L, timeline.expectedPositionMs())
+    }
+
+    @Test
+    fun `an unstaged video played with a start time keeps it through the wait for readiness`() = runTest {
+        val h = started(video("a"))
+
+        h.controller.play(video("b"), startAtMs = 7_000L)
+        settle()
+
+        assertEquals(7_000L, (h.plays.last() as PlaybackItem.Video).timeline?.startAtMs)
+    }
+
+    @Test
+    fun `a video played without a start time has no timeline`() = runTest {
+        val h = started(video("a"))
+        h.controller.prepareNext(video("b"))
+        runCurrent()
+        h.controller.play(video("b"))
+        runCurrent()
+
+        assertNull((h.plays.last() as PlaybackItem.Video).timeline)
+        assertNull((h.plays.first() as PlaybackItem.Video).timeline)
     }
 
     // Asset mapping
