@@ -217,6 +217,118 @@
       "uri": "file:///android_asset/samples/web_timer.html"
     },
     {
+      "id": "web_wikipedia",
+      "uri": "https://en.wikipedia.org/wiki/Television",
+      "mimeType": "text/html",
+      "durationMs": 15000,
+      "note": "Plain article, light"
+    },
+    {
+      "id": "web_hacker_news",
+      "uri": "https://news.ycombinator.com/",
+      "mimeType": "text/html",
+      "durationMs": 15000,
+      "note": "Plain HTML, very light"
+    },
+    {
+      "id": "web_bbc_news",
+      "uri": "https://www.bbc.com/news",
+      "mimeType": "text/html",
+      "durationMs": 15000,
+      "note": "News front page with a consent banner"
+    },
+    {
+      "id": "web_guardian",
+      "uri": "https://www.theguardian.com/international",
+      "mimeType": "text/html",
+      "durationMs": 15000,
+      "note": "News front page, many images"
+    },
+    {
+      "id": "web_cnn",
+      "uri": "https://edition.cnn.com/",
+      "mimeType": "text/html",
+      "durationMs": 15000,
+      "note": "News front page, heavy scripts and ads"
+    },
+    {
+      "id": "web_accuweather",
+      "uri": "https://www.accuweather.com/",
+      "mimeType": "text/html",
+      "durationMs": 15000,
+      "note": "Weather, ad-heavy"
+    },
+    {
+      "id": "web_time_is",
+      "uri": "https://time.is/",
+      "mimeType": "text/html",
+      "durationMs": 15000,
+      "note": "Live clock, updates every second"
+    },
+    {
+      "id": "web_windy",
+      "uri": "https://www.windy.com/",
+      "mimeType": "text/html",
+      "durationMs": 15000,
+      "note": "WebGL weather map with animated wind"
+    },
+    {
+      "id": "web_osm",
+      "uri": "https://www.openstreetmap.org/#map=12/51.5074/-0.1278",
+      "mimeType": "text/html",
+      "durationMs": 15000,
+      "note": "Tiled map"
+    },
+    {
+      "id": "web_google_maps",
+      "uri": "https://www.google.com/maps/@51.5074,-0.1278,13z",
+      "mimeType": "text/html",
+      "durationMs": 15000,
+      "note": "Heavy map app"
+    },
+    {
+      "id": "web_threejs",
+      "uri": "https://threejs.org/examples/webgl_animation_keyframes.html",
+      "mimeType": "text/html",
+      "durationMs": 15000,
+      "note": "WebGL 3D animation"
+    },
+    {
+      "id": "web_grafana",
+      "uri": "https://play.grafana.org/",
+      "mimeType": "text/html",
+      "durationMs": 15000,
+      "note": "Dashboard with live charts"
+    },
+    {
+      "id": "web_github",
+      "uri": "https://github.com/514sid/gapless",
+      "mimeType": "text/html",
+      "durationMs": 15000,
+      "note": "Repository page"
+    },
+    {
+      "id": "web_reddit",
+      "uri": "https://www.reddit.com/r/television/",
+      "mimeType": "text/html",
+      "durationMs": 15000,
+      "note": "Infinite feed, heavy scripts"
+    },
+    {
+      "id": "web_amazon",
+      "uri": "https://www.amazon.com/",
+      "mimeType": "text/html",
+      "durationMs": 15000,
+      "note": "Shop front page, heavy"
+    },
+    {
+      "id": "web_youtube_embed",
+      "uri": "https://www.youtube.com/embed/aqz-KE-bpKQ?autoplay=1&mute=1",
+      "mimeType": "text/html",
+      "durationMs": 15000,
+      "note": "Embedded video: the page needs a video decoder next to ExoPlayer's"
+    },
+    {
       "id": "broken_truncated_mp4",
       "mimeType": "video/mp4",
       "width": 1920,
@@ -443,6 +555,58 @@
       "hevc_720p30",
       "vp9_720p30"
     ],
+    "websites": [
+      "web_wikipedia",
+      "h264_1080p30",
+      "web_hacker_news",
+      "image_1920x1080_jpg",
+      "web_bbc_news",
+      "hevc_1080p30",
+      "web_guardian",
+      "vp9_1080p30",
+      "web_cnn",
+      "h264_1080p30",
+      "web_accuweather",
+      "image_1920x1080_jpg",
+      "web_time_is",
+      "hevc_1080p30",
+      "web_windy",
+      "vp9_1080p30",
+      "web_osm",
+      "h264_1080p30",
+      "web_google_maps",
+      "image_1920x1080_jpg",
+      "web_threejs",
+      "hevc_1080p30",
+      "web_grafana",
+      "vp9_1080p30",
+      "web_github",
+      "h264_1080p30",
+      "web_reddit",
+      "image_1920x1080_jpg",
+      "web_amazon",
+      "hevc_1080p30",
+      "web_youtube_embed",
+      "vp9_1080p30"
+    ],
+    "websites_only": [
+      "web_wikipedia",
+      "web_hacker_news",
+      "web_bbc_news",
+      "web_guardian",
+      "web_cnn",
+      "web_accuweather",
+      "web_time_is",
+      "web_windy",
+      "web_osm",
+      "web_google_maps",
+      "web_threejs",
+      "web_grafana",
+      "web_github",
+      "web_reddit",
+      "web_amazon",
+      "web_youtube_embed"
+    ],
     "all": [
       "h264_1080p30",
       "h264_1080p60",
@@ -468,7 +632,23 @@
       "image_8000x6000_huge_jpg",
       "image_640x360_small_png",
       "image_1920x1080_alpha_png",
-      "web_timer"
+      "web_timer",
+      "web_wikipedia",
+      "web_hacker_news",
+      "web_bbc_news",
+      "web_guardian",
+      "web_cnn",
+      "web_accuweather",
+      "web_time_is",
+      "web_windy",
+      "web_osm",
+      "web_google_maps",
+      "web_threejs",
+      "web_grafana",
+      "web_github",
+      "web_reddit",
+      "web_amazon",
+      "web_youtube_embed"
     ],
     "broken": [
       "broken_truncated_mp4",
