@@ -5,6 +5,7 @@ import android.os.Looper
 import androidx.media3.common.Format
 import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackException
+import androidx.media3.common.PlaybackParameters
 import androidx.media3.common.Player
 import androidx.media3.common.TrackSelectionParameters
 import androidx.media3.common.VideoSize
@@ -13,7 +14,9 @@ import androidx.media3.datasource.HttpDataSource
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.video.VideoFrameMetadataListener
 import androidx.test.core.app.ApplicationProvider
+import io.github._514sid.gapless.GaplessClock
 import io.github._514sid.gapless.GaplessVideoConfig
+import io.github._514sid.gapless.internal.VideoTimeline
 import io.github._514sid.gapless.internal.PlaybackItem
 import io.mockk.every
 import io.mockk.mockk
@@ -456,6 +459,172 @@ class DualVideoStateMachineTest {
         assertEquals(listOf(b.playbackId), starts.map { it.first })
     }
 
+    // --- Keeping a clip on its timeline ---
+
+    /** A clock the test moves by hand. */
+    private var clockNow = 0L
+    private val clock = GaplessClock { clockNow }
+
+    /** Plays [item] on a timeline starting at clock 0, and lets its start register. */
+    private fun playAnchored(item: PlaybackItem.Video): FakePlayer {
+        item.timeline = VideoTimeline(clock, 0L)
+        playFirst(item)
+        playerOf(item).releaseFrame()
+        idle(10)
+        return playerOf(item)
+    }
+
+    @Test
+    fun `an anchored clip that is behind plays faster, and ahead plays slower`() {
+        start()
+        val p = playAnchored(video("a"))
+
+        clockNow = 10_000
+        p.position = 9_900
+        idle(300)
+        assertTrue("speed ${p.speed}", p.speed > 1f)
+
+        p.position = 10_100
+        idle(300)
+        assertTrue("speed ${p.speed}", p.speed < 1f)
+
+        p.position = 10_000
+        idle(300)
+        assertEquals(1f, p.speed)
+    }
+
+    @Test
+    fun `a 60 fps clip that is behind isn't sped up`() {
+        start()
+        val a = video("a")
+        a.timeline = VideoTimeline(clock, 0L)
+        playFirst(a)
+        val p = playerOf(a)
+        p.frameRate = 60f
+        p.releaseFrame()
+        idle(10)
+
+        clockNow = 10_000
+        p.position = 9_850
+        idle(1_000)
+
+        assertEquals(1f, p.speed)
+        assertTrue(p.seeks.isEmpty())
+    }
+
+    @Test
+    fun `a clip that stalls while sped up goes back to normal speed and isn't sped up again`() {
+        start()
+        val p = playAnchored(video("a"))
+        clockNow = 10_000
+        p.position = 9_900
+        idle(300)
+        assertTrue(p.speed > 1f)
+
+        p.playbackState = Player.STATE_BUFFERING
+        idle(300)
+        assertEquals(1f, p.speed)
+
+        p.playbackState = Player.STATE_READY
+        p.position = 9_850
+        idle(1_000)
+        assertEquals(1f, p.speed)
+    }
+
+    @Test
+    fun `an anchored clip far off its timeline seeks once, then waits out the cooldown`() {
+        start()
+        val p = playAnchored(video("a"))
+
+        clockNow = 10_000
+        p.position = 8_000
+        idle(300)
+        assertEquals(listOf(10_000L), p.seeks)
+
+        // Still far off right after (a slow seek): no second seek yet, the speed works on it.
+        p.position = 9_000
+        idle(1_000)
+        assertEquals(1, p.seeks.size)
+        assertTrue(p.speed > 1f)
+    }
+
+    @Test
+    fun `an anchored clip isn't corrected before it starts moving`() {
+        start()
+        val a = video("a")
+        a.timeline = VideoTimeline(clock, 0L)
+        playFirst(a) // its first frame since play() hasn't been released yet
+        val p = playerOf(a)
+
+        clockNow = 10_000
+        idle(1_000)
+
+        assertTrue(p.seeks.isEmpty())
+        assertEquals(1f, p.speed)
+    }
+
+    @Test
+    fun `a clip without a timeline is never corrected`() {
+        start()
+        val a = video("a")
+        playFirst(a)
+        val p = playerOf(a)
+        p.releaseFrame()
+
+        clockNow = 10_000
+        p.position = 500
+        idle(2_000)
+
+        assertTrue(p.seeks.isEmpty())
+        assertEquals(1f, p.speed)
+    }
+
+    @Test
+    fun `the cut away from an anchored clip resets its player's speed and stops correcting`() {
+        start()
+        val a = video("a")
+        val pa = playAnchored(a)
+        clockNow = 10_000
+        pa.position = 9_900
+        idle(300)
+        assertTrue(pa.speed > 1f)
+
+        val b = video("b")
+        engine.prepare(b)
+        playerOf(b).firstFrame()
+        engine.play(b)
+        playerOf(b).playbackState = Player.STATE_READY
+        playerOf(b).releaseFrame()
+        playerOf(b).position = 0
+        idle(2_000)
+
+        assertEquals(1f, pa.speed)
+        assertEquals(1f, playerOf(b).speed)
+        assertTrue(playerOf(b).seeks.isEmpty())
+    }
+
+    @Test
+    fun `an anchored clip keeps being corrected on a player rebuilt by a retry`() {
+        start()
+        val a = video("a")
+        playAnchored(a)
+        val before = fakes.size
+        // Fail and retry until the last attempt rebuilds the player.
+        repeat(3) {
+            playerOf(a).error(PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_FAILED)
+            idle(5_000)
+        }
+        assertTrue("player rebuilt", fakes.size > before)
+        val rebuilt = playerOf(a)
+        rebuilt.playbackState = Player.STATE_READY
+
+        clockNow = 20_000
+        rebuilt.position = 19_900
+        idle(300)
+
+        assertTrue("speed ${rebuilt.speed}", rebuilt.speed > 1f)
+    }
+
     private fun playFirst(item: PlaybackItem.Video) {
         engine.prepare(item)
         playerOf(item).firstFrame()
@@ -491,6 +660,10 @@ class DualVideoStateMachineTest {
         var position = 0L
         var positionReads = 0
         var mediaItem: MediaItem? = null
+        var speed = 1f
+        val seeks = mutableListOf<Long>()
+        var duration = 60_000L
+        var frameRate = 30f
         private var playWhenReady = false
         private var volume = 1f
         private var params: TrackSelectionParameters = TrackSelectionParameters.DEFAULT
@@ -531,6 +704,14 @@ class DualVideoStateMachineTest {
                 preparesSinceMedia = 0
             }
             every { mock.clearMediaItems() } answers { mediaItem = null }
+            every { mock.setPlaybackSpeed(any()) } answers { speed = firstArg() }
+            every { mock.playbackParameters } answers { PlaybackParameters(speed) }
+            every { mock.seekTo(any<Long>()) } answers {
+                position = firstArg()
+                seeks += firstArg<Long>()
+            }
+            every { mock.duration } answers { duration }
+            every { mock.videoFormat } answers { Format.Builder().setFrameRate(frameRate).build() }
         }
 
         fun firstFrame() = listener.onRenderedFirstFrame()

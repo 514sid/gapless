@@ -118,6 +118,7 @@ lifecycleScope.launch {
 | `start(asset)` | Begin playback with the given asset. |
 | `prepareNext(asset)` | Start buffering the next asset. Call this early — as soon as `Started` fires — so it is ready when `play` is called. |
 | `play(asset)` | Transition to the asset. If already preloading, transitions immediately. If not, prepares it first and plays as soon as the renderer is ready. |
+| `play(asset, startAtMs)` | Experimental. Like `play`, and keeps a video on a timeline while it plays; see [Synced playback](#synced-playback-experimental). |
 | `stop()` | Halt playback and forget the current and staged assets. `start` resumes. |
 | `close()` | Stop and shut the controller down for good. |
 | `events: SharedFlow<GaplessEvent>` | Stream of playback events (collect in a coroutine). |
@@ -271,6 +272,43 @@ What still reaches you:
 
 Native crashes inside a vendor codec, and ANRs, can't be caught in-process. Run the player in its own
 process with a watchdog, as the sample app does, if that matters for your deployment.
+
+### Synced playback (experimental)
+
+Several devices can show the same content in step, for a video wall or screens side by side. This
+API is experimental: it works and is tested, but it may change in any release, so using it needs
+an explicit opt-in with `@OptIn(ExperimentalGaplessApi::class)`. Everything else in the library
+works the same without it.
+
+The host supplies two things: a clock all devices agree on, and a schedule worked out from it.
+Give the clock to the controller and play each asset at its slot's start time:
+
+```kotlin
+@OptIn(ExperimentalGaplessApi::class)
+val manager = GaplessController(lifecycleScope, clock = GaplessClock { sharedClock.nowMs() })
+
+// At each slot boundary on the shared clock:
+manager.play(next, startAtMs = slotStart)
+```
+
+The cut happens when `play` is called, so call it at the slot start. A video played with a start
+time is then kept on that timeline while it plays:
+
+- A clip that started late plays up to 5% faster until it has caught up, over about two seconds.
+- A clip that drifts from the shared clock is sped up or slowed down by a fraction of a percent.
+- A clip off by half a second or more seeks, at most once every five seconds. A seek briefly
+  freezes the picture.
+- A speed-up never asks the decoder for more than 60 frames a second, so a 60 fps clip is only
+  ever slowed down; a clip that stalls while sped up goes back to normal speed for the rest of it.
+
+Images and web pages only need the cut on time. Clips played without a start time, and every
+clip on a controller without a clock, play exactly as before.
+
+The library doesn't synchronize clocks or carry the schedule between devices. The sample app
+has a complete example over UDP on the LAN, with a script that measures how far apart two
+devices are: see `samples/README.md`. On two identical TVs it kept the pictures within one frame
+(33 ms) of each other, with a median gap of about 5 ms. Muted playback was tested; with audio on,
+its start-up delay differs between devices and isn't compensated yet.
 
 ---
 

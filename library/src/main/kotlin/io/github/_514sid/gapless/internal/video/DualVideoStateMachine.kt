@@ -42,6 +42,9 @@ import java.util.concurrent.atomic.AtomicBoolean
  *   provisional until the parked clip draws at its cut; if its decoder still fails with the other
  *   slot empty, the clip was at fault, so it is reported and seamless cuts resume.
  * - A playing clip that stops advancing for [GaplessVideoConfig.stallTimeoutMs] is restarted.
+ *
+ * A clip played with a timeline (a start time on the host's clock) is kept on it while it plays;
+ * see [TimelineKeeper]. Every other clip plays at normal speed.
  */
 @OptIn(UnstableApi::class)
 internal class DualVideoStateMachine(
@@ -125,6 +128,24 @@ internal class DualVideoStateMachine(
     private var lastProgressAt = 0L
 
     private var watchdogRunning = false
+
+    /** The slot whose clip is kept on its timeline, or -1. */
+    private var timelineSlot = -1
+    private var lastSeekAt = Long.MIN_VALUE / 2
+    private var timelineTicks = 0
+
+    /** Set when speeding the current clip up made it stall; it is then only ever slowed down. */
+    private var speedUpBlocked = false
+
+    private val timelineTick = object : Runnable {
+        override fun run() {
+            if (released || timelineSlot == -1) return
+            keepTimeline()
+            if (timelineSlot == -1) return
+            handler.removeCallbacks(this)
+            handler.postDelayed(this, TIMELINE_INTERVAL_MS)
+        }
+    }
 
     /** Tracks the current clip's progress: refills its retry budget, and catches stalls. */
     private val watchdog = object : Runnable {
@@ -220,6 +241,7 @@ internal class DualVideoStateMachine(
 
         val p = players[slot]
         p.volume = 0f
+        p.setPlaybackSpeed(1f)
         p.setAudioEnabled(item.volume > 0f)
         p.setMediaItem(buildMediaItem(item))
         p.playWhenReady = false
@@ -250,6 +272,7 @@ internal class DualVideoStateMachine(
         currentSlot = target
         resetWatchdog()
         startWatchdog()
+        if (item.timeline != null) startTimeline(target) else stopTimeline()
         if (!reclaimedSinceCut) reclaimStreak = 0
         reclaimedSinceCut = false
 
@@ -308,7 +331,10 @@ internal class DualVideoStateMachine(
         retryCount[slot] = 0
         watchFrames[slot].set(false)
         if (pendingFlip == slot) pendingFlip = -1
+        if (timelineSlot == slot) stopTimeline()
         val p = players[slot]
+        // The player is reused for later clips, which must not inherit a corrected speed.
+        p.setPlaybackSpeed(1f)
         p.stop()
         p.clearMediaItems()
         p.playWhenReady = false
@@ -524,7 +550,67 @@ internal class DualVideoStateMachine(
         }
     }
 
+    private fun startTimeline(slot: Int) {
+        timelineSlot = slot
+        lastSeekAt = Long.MIN_VALUE / 2
+        timelineTicks = 0
+        speedUpBlocked = false
+        handler.removeCallbacks(timelineTick)
+        handler.postDelayed(timelineTick, TIMELINE_INTERVAL_MS)
+    }
+
+    private fun stopTimeline() {
+        timelineSlot = -1
+        handler.removeCallbacks(timelineTick)
+    }
+
+    /** Nudges the current clip's speed, or seeks, to keep it on its timeline. */
+    private fun keepTimeline() {
+        val slot = timelineSlot
+        val item = items[slot]
+        val timeline = item?.timeline
+        if (timeline == null || slot != currentSlot) {
+            stopTimeline()
+            return
+        }
+        // Not until the clip is really moving on screen: during a hard cut, or while its start
+        // waits for the audio output, its position says nothing about how late it is.
+        if (pendingFlip != -1 || deferred[slot] || item.playbackId == awaitingStart) return
+        val p = players[slot]
+        if (p.playbackState == Player.STATE_BUFFERING && p.playbackParameters.speed > 1f) {
+            // The decoder can't keep up at this speed (or the stream can't): the clip would stall
+            // where it should catch up. Normal speed for the rest of it; a seek fixes large errors.
+            Log.w(TAG, "Slot $slot (${item.assetId}): stalled while sped up; no more speed-ups for this clip")
+            speedUpBlocked = true
+            p.setPlaybackSpeed(1f)
+            return
+        }
+        if (p.playbackState != Player.STATE_READY || !p.playWhenReady) return
+
+        val now = SystemClock.elapsedRealtime()
+        val position = p.currentPosition
+        val expected = timeline.expectedPositionMs()
+        val speed = p.playbackParameters.speed
+        val canSeek = now - lastSeekAt >= TimelineKeeper.SEEK_COOLDOWN_MS
+        val maxSpeedUp = if (speedUpBlocked) 0f else TimelineKeeper.maxSpeedUpFor(p.videoFormat?.frameRate ?: 0f)
+        when (val correction = TimelineKeeper.correct(position, expected, p.duration, speed, canSeek, maxSpeedUp)) {
+            is TimelineKeeper.Correction.Speed -> p.setPlaybackSpeed(correction.speed)
+            is TimelineKeeper.Correction.Seek -> {
+                Log.w(TAG, "Slot $slot (${item.assetId}): ${position - expected}ms off its timeline; seeking")
+                lastSeekAt = now
+                p.seekTo(correction.positionMs)
+            }
+            TimelineKeeper.Correction.None -> Unit
+        }
+        // For measuring sync: adb shell setprop log.tag.GaplessTimeline DEBUG
+        if (timelineTicks++ % TIMELINE_LOG_EVERY == 0 && Log.isLoggable(TIMELINE_TAG, Log.DEBUG)) {
+            Log.d(TIMELINE_TAG, "asset=${item.assetId} clock=${timeline.clock.nowMs()} " +
+                "error=${position - expected}ms speed=$speed")
+        }
+    }
+
     fun clear() {
+        stopTimeline()
         clearSlot(0, keepFrame = false)
         clearSlot(1, keepFrame = false)
         currentSlot = 0
@@ -589,6 +675,9 @@ internal class DualVideoStateMachine(
         const val RECLAIM_STREAK_FOR_HARD_CUTS = 2
         const val RETRY_FORGET_MS = 30_000L
         const val WATCHDOG_INTERVAL_MS = 1_000L
+        const val TIMELINE_INTERVAL_MS = 250L
+        const val TIMELINE_LOG_EVERY = 4
+        const val TIMELINE_TAG = "GaplessTimeline"
     }
 }
 

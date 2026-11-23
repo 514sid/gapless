@@ -26,6 +26,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.remember
@@ -57,6 +58,9 @@ class PlayerActivity : ComponentActivity() {
         const val EXTRA_PLAYLIST2 = "playlist2"
         const val EXTRA_IDS2 = "ids2"
         const val EXTRA_VOLUME2 = "volume2"
+        const val EXTRA_SYNC = "sync"
+        const val EXTRA_ANCHOR = "anchor"
+        const val EXTRA_LATE_MS = "lateMs"
         private const val DEFAULT_PLAYLIST = "mixed"
     }
 
@@ -86,6 +90,12 @@ class PlayerActivity : ComponentActivity() {
         // Videos above Full HD: on if asked, otherwise only if the display itself goes above it.
         val allowUhd =
             if (intent.hasExtra(EXTRA_UHD)) intent.getBooleanExtra(EXTRA_UHD, true) else displayIsAboveFullHd()
+        // Synced playback across devices: "leader" on one, the leader's address on the others.
+        intent.getStringExtra(EXTRA_SYNC)?.let { sync ->
+            startSynced(manifest, sync, volume, allowUhd, showClock)
+            return
+        }
+
         // One player, or two side by side, each with its own controller and schedule.
         val players = intent.getIntExtra(EXTRA_PLAYERS, 1).coerceIn(1, 2)
         val first = resolvePlaylist(manifest, EXTRA_IDS, EXTRA_PLAYLIST, DEFAULT_PLAYLIST, volume, allowUhd)
@@ -157,6 +167,42 @@ class PlayerActivity : ComponentActivity() {
     }
 
     /**
+     * Plays one player in step with other devices: [role] is "leader", which also picks the
+     * playlist for everyone, or the leader's address. See [ClockSync] and [SyncedRunner].
+     */
+    private fun startSynced(
+        manifest: SampleManifest,
+        role: String,
+        volume: Float,
+        allowUhd: Boolean,
+        showClock: Boolean,
+    ) {
+        val sync = if (role == "leader") {
+            ClockSync.leader(resolvePlaylist(manifest, EXTRA_IDS, EXTRA_PLAYLIST, DEFAULT_PLAYLIST, volume, allowUhd).map { it.id })
+        } else {
+            ClockSync.follower(role)
+        }
+        // The leader's list as is: filtering it here could leave this device on a different schedule.
+        val runner = SyncedRunner(
+            lifecycleScope,
+            sync,
+            anchor = intent.getBooleanExtra(EXTRA_ANCHOR, true),
+            lateMs = intent.getIntExtra(EXTRA_LATE_MS, 0).toLong(),
+        ) { ids -> manifest.assets(ids, volume, allowUhd = true) }
+        Log.d(TAG, "Synced playback as ${if (sync.isLeader) "leader" else "follower of $role"}")
+        runner.start()
+
+        setContent {
+            MaterialTheme {
+                Surface(modifier = Modifier.fillMaxSize(), color = Color.Black) {
+                    GaplessPlayer(modifier = Modifier.fillMaxSize(), controller = runner.controller)
+                    if (showClock) SharedClock(sync, runner)
+                }
+            }
+        }
+    }
+
+    /**
      * The assets named by the [idsExtra] (comma-separated ids) or [playlistExtra] launch extra,
      * falling back to [default] when neither names anything known.
      */
@@ -192,6 +238,31 @@ class PlayerActivity : ComponentActivity() {
         return display.supportedModes.any {
             maxOf(it.physicalWidth, it.physicalHeight) > 1920 || minOf(it.physicalWidth, it.physicalHeight) > 1080
         }
+    }
+}
+
+/**
+ * The shared clock and the sync status, drawn over the player. With the devices side by side, a
+ * photo shows whether their clocks and clips agree.
+ */
+@Composable
+private fun SharedClock(sync: ClockSync, runner: SyncedRunner) {
+    var ms by remember { mutableLongStateOf(sync.now()) }
+    val status by runner.status.collectAsState()
+    LaunchedEffect(Unit) {
+        while (true) withFrameMillis { ms = sync.now() }
+    }
+    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.BottomEnd) {
+        Text(
+            text = "shared %d:%02d.%03d\n%s".format(ms / 60_000 % 60, ms / 1000 % 60, ms % 1000, status),
+            color = Color.White,
+            fontSize = 28.sp,
+            fontFamily = FontFamily.Monospace,
+            modifier = Modifier
+                .padding(16.dp)
+                .background(Color.Black.copy(alpha = 0.7f))
+                .padding(horizontal = 12.dp, vertical = 4.dp),
+        )
     }
 }
 
