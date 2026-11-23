@@ -1,24 +1,24 @@
 [versions]
-agp            = "9.2.1"
-kotlin         = "2.3.21"
+agp            = "9.5.1"
+kotlin         = "2.4.21"
 compileSdk     = "37"
 minSdk         = "26"
-composeBom     = "2026.05.00"
-lifecycle      = "2.10.0"
-media3         = "1.10.1"
-coil           = "3.4.0"
-maven-publish  = "0.36.0"
-junit5              = "6.0.3"
-androidx-test       = "1.6.2"
-androidx-test-ext   = "1.2.1"
-mockk               = "1.13.17"
-coroutines          = "1.10.2"
+composeBom     = "2026.09.00"
+lifecycle      = "2.11.0"
+media3         = "1.11.1"
+coil           = "3.6.3"
+maven-publish  = "0.37.0"
+junit5              = "6.1.3"
+androidx-test       = "1.7.0"
+androidx-test-ext   = "1.3.0"
+mockk               = "1.14.12"
+coroutines          = "1.11.0"
 androidx-webkit     = "1.18.0"
 robolectric         = "4.17"
 # The Android runtime Robolectric 4.17 runs SDK 34 tests on. Change it with Robolectric.
 robolectric-android-all = "14-robolectric-10818077-i7"
 junit4              = "4.13.2"
-androidx-test-core  = "1.6.1"
+androidx-test-core  = "1.7.0"
 
 [libraries]
 androidx-compose-bom                 = { group = "androidx.compose",           name = "compose-bom",                    version.ref = "composeBom" }
@@ -46,7 +46,7 @@ robolectric-android-all              = { group = "org.robolectric",            n
 androidx-test-core                   = { group = "androidx.test",              name = "core",                           version.ref = "androidx-test-core" }
 mockk                                = { group = "io.mockk",                    name = "mockk",                          version.ref = "mockk"      }
 kotlinx-coroutines-test              = { group = "org.jetbrains.kotlinx",       name = "kotlinx-coroutines-test",        version.ref = "coroutines" }
-androidx-activity-compose            = { group = "androidx.activity", name = "activity-compose", version = "1.10.1" }
+androidx-activity-compose            = { group = "androidx.activity", name = "activity-compose", version = "1.13.0" }
 androidx-compose-material3           = { group = "androidx.compose.material3", name = "material3" }
 
 [plugins]
