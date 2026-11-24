@@ -10,6 +10,9 @@ import coil3.request.ErrorResult
 import coil3.request.ImageRequest
 import coil3.request.allowHardware
 import coil3.size.Precision
+import coil3.size.Scale
+import coil3.size.Size
+import io.github._514sid.gapless.GaplessFit
 import kotlin.coroutines.ContinuationInterceptor
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
@@ -28,12 +31,14 @@ import java.util.UUID
 internal class ImageStateMachine(
     private val context: Context,
     private val scope: CoroutineScope,
-    private val loadImage: suspend (model: Any, width: Int, height: Int) -> Unit = { model, w, h ->
+    private val loadImage: suspend (model: Any, width: Int, height: Int, fit: GaplessFit) -> Unit = { model, w, h, fit ->
         val result = context.imageLoader.execute(
             ImageRequest.Builder(context)
                 .data(model)
-                .size(w, h)
-                // Same as AsyncImage with ContentScale.Fit, so its request is a cache hit.
+                // Same as AsyncImage with the slot's ContentScale, so its request is a cache hit:
+                // None decodes the whole image, Crop and FillBounds to fill the size, Fit to fit inside it.
+                .apply { if (fit == GaplessFit.Original) size(Size.ORIGINAL) else size(w, h) }
+                .scale(if (fit == GaplessFit.Contain) Scale.FIT else Scale.FILL)
                 .precision(Precision.INEXACT)
                 .allowHardware(true)
                 .build()
@@ -94,7 +99,7 @@ internal class ImageStateMachine(
 
         renderState = renderState.setSlot(
             slot = inactiveSlot,
-            value = ImageSlotState(item.model, item.playbackId, loaded = false)
+            value = ImageSlotState(item.model, item.playbackId, loaded = false, framing = item.framing)
         )
 
         val owner = scope.coroutineContext[ContinuationInterceptor] ?: Dispatchers.Main
@@ -106,7 +111,7 @@ internal class ImageStateMachine(
                     containerSize.first { (w, h) -> w > 0 && h > 0 }
                 } ?: containerSize.value
                 val (targetW, targetH) = targetSize(width, height)
-                loadImage(item.model, targetW, targetH)
+                loadImage(item.model, targetW, targetH, item.framing.fit)
                 // Decoded and cached: now let the slot show it.
                 withContext(owner) { markLoaded(item) }
             } catch (e: CancellationException) {
@@ -200,7 +205,7 @@ internal class ImageStateMachine(
         if (staged?.playbackId != item.playbackId) {
             renderState = renderState.setSlot(
                 slot = target,
-                value = ImageSlotState(item.model, item.playbackId)
+                value = ImageSlotState(item.model, item.playbackId, framing = item.framing)
             )
         } else if (!staged.loaded) {
             // Cut before the preload finished: the slot loads it itself now.

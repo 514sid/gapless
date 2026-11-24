@@ -15,6 +15,9 @@ import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.video.VideoFrameMetadataListener
 import androidx.test.core.app.ApplicationProvider
 import io.github._514sid.gapless.GaplessClock
+import io.github._514sid.gapless.GaplessFit
+import io.github._514sid.gapless.internal.ContentSize
+import io.github._514sid.gapless.internal.Framing
 import io.github._514sid.gapless.GaplessVideoConfig
 import io.github._514sid.gapless.internal.VideoTimeline
 import io.github._514sid.gapless.internal.PlaybackItem
@@ -313,8 +316,46 @@ class DualVideoStateMachineTest {
         val slot = engine.renderState.activeSlot
 
         playerOf(d).listener.onVideoSizeChanged(VideoSize(1000, 500))
-        val aspect = if (slot == 0) engine.renderState.aspectRatioA else engine.renderState.aspectRatioB
-        assertEquals(2f, aspect)
+        val size = if (slot == 0) engine.renderState.sizeA else engine.renderState.sizeB
+        assertEquals(ContentSize(1000f, 500f), size)
+    }
+
+    // --- Framing ---
+
+    @Test
+    fun `each slot is framed as its clip asks`() {
+        start()
+        val cover = Framing(GaplessFit.Cover, 0xFFFFFFFF.toInt())
+        val a = video("a", cover)
+        playFirst(a)
+        val shown = engine.renderState.activeSlot
+        assertEquals(cover, framingOf(shown))
+
+        val b = video("b")
+        engine.prepare(b)
+        assertEquals(Framing(), framingOf(1 - shown))
+        playerOf(b).firstFrame()
+        engine.play(b)
+        assertEquals(Framing(), framingOf(engine.renderState.activeSlot))
+    }
+
+    @Test
+    fun `during a hard cut the frozen frame keeps its framing until the new clip draws`() {
+        start()
+        enterConfirmedHardCuts() // b, framed by default, is on screen
+        val stretch = Framing(GaplessFit.Stretch, 0xFF00FF00.toInt())
+        val c = video("c", stretch)
+        engine.prepare(c)
+        engine.play(c) // hard cut, pending
+        val frozen = engine.renderState.activeSlot
+        val d = video("d", Framing(GaplessFit.Cover))
+        engine.prepare(d) // parked in the slot still on screen
+        assertEquals("the frozen frame is framed as before", Framing(), framingOf(frozen))
+
+        playerOf(c).firstFrame()
+        assertEquals(1 - frozen, engine.renderState.activeSlot)
+        assertEquals(stretch, framingOf(1 - frozen))
+        assertEquals("the hidden slot takes the parked clip's framing", d.framing, framingOf(frozen))
     }
 
     // --- Watchdog ---
@@ -679,8 +720,11 @@ class DualVideoStateMachineTest {
 
     private fun playerOf(item: PlaybackItem.Video): FakePlayer = fakes.last { it.uri == item.uri }
 
-    private fun video(id: String) =
-        PlaybackItem.Video(uri = "https://example.com/$id.mp4", mimeType = "video/mp4").apply { assetId = id }
+    private fun video(id: String, framing: Framing = Framing()) =
+        PlaybackItem.Video(uri = "https://example.com/$id.mp4", mimeType = "video/mp4", framing = framing)
+            .apply { assetId = id }
+
+    private fun framingOf(slot: Int) = if (slot == 0) engine.renderState.framingA else engine.renderState.framingB
 
     private fun idle(ms: Long) = shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(ms))
 

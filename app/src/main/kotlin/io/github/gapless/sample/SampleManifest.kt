@@ -2,6 +2,7 @@ package io.github.gapless.sample
 
 import android.content.Context
 import io.github._514sid.gapless.GaplessAsset
+import io.github._514sid.gapless.GaplessFit
 import org.json.JSONObject
 
 /**
@@ -35,6 +36,15 @@ class SampleManifest(
         playlists,
     )
 
+    /** The same media with every video and image given [fit] and [backgroundColor], where set. */
+    fun framed(fit: GaplessFit?, backgroundColor: Int?): SampleManifest = SampleManifest(
+        assets.mapValues { (_, a) ->
+            a.copy(fit = fit ?: a.fit, backgroundColor = backgroundColor ?: a.backgroundColor)
+        },
+        broken,
+        playlists,
+    )
+
     private fun GaplessAsset.isUhdVideo(): Boolean {
         if (!mimeType.startsWith("video/")) return false
         val w = width ?: return false
@@ -44,6 +54,18 @@ class SampleManifest(
 
     companion object {
         const val PATH = "samples/samples.json"
+
+        /** `contain`, `cover`, `stretch` or `original`, in any case. */
+        fun parseFit(name: String): GaplessFit =
+            GaplessFit.entries.firstOrNull { it.name.equals(name, ignoreCase = true) }
+                ?: throw IllegalArgumentException("Unknown fit \"$name\"; use contain, cover, stretch or original")
+
+        /**
+         * `RRGGBB` or `AARRGGBB`, with or without a leading `#`. The device shell reads `#` as the
+         * start of a comment, so launch extras leave it out.
+         */
+        fun parseColor(hex: String): Int =
+            android.graphics.Color.parseColor(if (hex.startsWith("#")) hex else "#$hex")
 
         fun load(context: Context): SampleManifest {
             val json = JSONObject(context.assets.open(PATH).bufferedReader().use { it.readText() })
@@ -62,6 +84,9 @@ class SampleManifest(
                     durationMs = a.getLong("durationMs"),
                     javaScript = a.optString("javaScript").takeIf { it.isNotEmpty() },
                     waitForPageReady = a.optBoolean("waitForPageReady"),
+                    fit = a.optString("fit").takeIf { it.isNotEmpty() }?.let(::parseFit) ?: GaplessFit.Contain,
+                    backgroundColor = a.optString("background").takeIf { it.isNotEmpty() }
+                        ?.let(::parseColor) ?: 0xFF000000.toInt(),
                 )
             }
             val lists = json.getJSONObject("playlists")

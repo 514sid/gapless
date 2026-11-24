@@ -1,5 +1,7 @@
 package io.github._514sid.gapless
 
+import io.github._514sid.gapless.internal.ContentSize
+import io.github._514sid.gapless.internal.Framing
 import io.github._514sid.gapless.internal.PlaybackItem
 import io.github._514sid.gapless.internal.PlayerCommand
 import io.github._514sid.gapless.internal.VideoTimeline
@@ -450,14 +452,16 @@ public class GaplessController(
             g.isVideo -> PlaybackItem.Video(
                 uri = g.uri,
                 mimeType = g.mimeType,
-                aspectRatioHint = aspectRatioOf(g.width, g.height),
+                sizeHint = ContentSize.of(g.width, g.height),
                 volume = g.volume,
                 durationMs = g.durationMs,
+                framing = Framing(g.fit, g.backgroundColor),
             )
             g.isImage -> PlaybackItem.Image(
                 model = g.uri,
                 width = g.width ?: 1920,
-                height = g.height ?: 1080
+                height = g.height ?: 1080,
+                framing = Framing(g.fit, g.backgroundColor),
             )
             else -> PlaybackItem.Web(
                 url = g.uri,
@@ -479,9 +483,6 @@ public class GaplessController(
         val port = if (parsed.port == -1) "" else ":${parsed.port}"
         return setOf("$scheme://${parsed.host.lowercase()}$port")
     }
-
-    private fun aspectRatioOf(width: Int?, height: Int?): Float? =
-        if (width != null && height != null && width > 0 && height > 0) width.toFloat() / height else null
 
     private companion object {
         const val READY_POLL_MS = 50L

@@ -62,6 +62,8 @@ class PlayerActivity : ComponentActivity() {
         const val EXTRA_ANCHOR = "anchor"
         const val EXTRA_LATE_MS = "lateMs"
         const val EXTRA_SCRIPTS = "scripts"
+        const val EXTRA_FIT = "fit"
+        const val EXTRA_BACKGROUND = "background"
         private const val DEFAULT_PLAYLIST = "mixed"
     }
 
@@ -85,9 +87,13 @@ class PlayerActivity : ComponentActivity() {
         // Which generated playlist to loop, and at what volume. Passed through from MainActivity:
         // adb shell am start -S -n io.github.gapless.sample/.MainActivity --es playlist codecs
         // --ez scripts false drops the page scripts and readiness waits, to compare without them.
+        // --es fit cover and --es background 202020 frame every video and image that way.
         val manifest = SampleManifest.load(this).let {
             if (intent.getBooleanExtra(EXTRA_SCRIPTS, true)) it else it.withoutScripts()
-        }
+        }.framed(
+            fit = intent.getStringExtra(EXTRA_FIT)?.let(SampleManifest::parseFit),
+            backgroundColor = intent.getStringExtra(EXTRA_BACKGROUND)?.let(SampleManifest::parseColor),
+        )
         val playlistName = intent.getStringExtra(EXTRA_PLAYLIST) ?: DEFAULT_PLAYLIST
         val volume = intent.getFloatExtra(EXTRA_VOLUME, 1f)
         val showClock = intent.getBooleanExtra(EXTRA_CLOCK, false)

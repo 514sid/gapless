@@ -34,6 +34,7 @@ adb shell am start -S -n io.github.gapless.sample/.MainActivity --es playlist co
 - `--ez fallback true` turns on `GaplessVideoConfig.enableDecoderFallback` (off by default), so a decoder that can't open falls back to a software one instead of failing.
 - `--ei players 2` shows two players side by side, each with its own controller and schedule. The right one plays the same list shifted by one clip and is muted; `--es playlist2 <name>` or `--es ids2 a,b,c` give it its own list and `--ef volume2 1` unmutes it. Each player holds two decoders, so two players need four. On a TV with two hardware decoders, each player then switches to hard cuts, or with `--ez fallback true` the rest decode in software, which is why `split_720p` exists.
 - `--ez uhd false` leaves out videos larger than 1920x1080 (the two 4K clips), for devices that only decode Full HD. `--ez uhd true` keeps them. Without the extra, the app keeps them only if the display has a mode above 1920x1080. Images and broken assets are never left out, so `broken_hevc_4320p` still tests a clip the decoder can't take.
+- `--es fit cover` frames every video and image with that fit (`contain`, `cover`, `stretch` or `original`), and `--es background 202020` colours the bars around them. Assets in `samples.json` can set their own `fit` and `background` too.
 - `--ez scripts false` drops every page's script and readiness wait, to compare a page with and without them.
 - `--es sync leader` or `--es sync <leader address>` plays in step with other devices on the LAN; see [Synced playback](#synced-playback).
 

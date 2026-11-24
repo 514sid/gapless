@@ -168,6 +168,10 @@ GaplessAsset(
     height   = 1080,
     volume   = 0f,           // video only: 0.0 (silent) to 1.0 (full)
 
+    // Videos and images
+    fit = GaplessFit.Contain,             // Contain (default), Cover, Stretch or Original
+    backgroundColor = 0xFF000000.toInt(), // ARGB colour of the bars around contained content
+
     // Video only
     durationMs = 10_000,     // optional; clip the video so the next one can preload early
 
@@ -196,6 +200,22 @@ GaplessPlayer(
 
 The host still drives the transition with `play()`. If a clip reaches its `durationMs` end before then, it holds
 on the last frame and never auto-advances. Leave `durationMs` null for live streams (HLS/DASH/RTSP).
+
+**`fit` and `backgroundColor` (videos and images).** Content rarely has the screen's exact shape. `fit`
+says what to do about it:
+
+| `fit` | Result |
+| :---- | :----- |
+| `Contain` (default) | All of it shows, as large as fits, with bars of `backgroundColor` on two sides. |
+| `Cover` | It fills the screen, keeping its shape. Whatever sticks out at the edges is cut off. |
+| `Stretch` | It fills the screen and is distorted to its shape. |
+| `Original` | It shows at its own size in pixels, centred and not scaled: cropped when larger than the screen, with bars when smaller. |
+
+`Original` counts the player's layout pixels, so on a TV whose UI runs at 1080p on a 4K panel a pixel is four
+of the panel's. Images are decoded whole for it, so keep them no larger than needed.
+
+`backgroundColor` is ARGB and defaults to opaque black. Both fields are per asset, so each item you play brings its own: a white still can sit on
+white bars while the video after it keeps black ones. Web pages lay themselves out and ignore both fields.
 
 **MIME type to renderer mapping:**
 
