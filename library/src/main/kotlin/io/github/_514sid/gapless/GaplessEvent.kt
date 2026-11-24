@@ -25,13 +25,15 @@ public sealed class GaplessEvent {
 
     /**
      * A video played to its end: a clip reached its last frame, or a stream finished (video on
-     * demand, or a live stream the server marked as ended). The last frame stays on screen until
-     * the next [GaplessController.play], and [Ended] still follows when something replaces it.
+     * demand, or a live stream the server marked as ended). Also an animated image that played
+     * its [GaplessAsset.animationLoops]. The last frame stays on screen until the next
+     * [GaplessController.play], and [Ended] still follows when something replaces it.
      *
      * Use it to move on as soon as a clip or stream is done, when its length is unknown or shorter
      * than its slot, instead of holding the last frame. A live stream that just stops arriving
-     * doesn't end: it stalls, is retried, and ends in [PlaybackError]. Not emitted for images and
-     * web pages, which have no end, or for a clip cut away from before its end.
+     * doesn't end: it stalls, is retried, and ends in [PlaybackError]. Not emitted for still images,
+     * animations left to loop, and web pages, which have no end, or for anything cut away from
+     * before its end.
      */
     public data class Completed(val asset: GaplessAsset, val playbackId: UUID, override val timestamp: Long = System.currentTimeMillis()) : GaplessEvent()
     /**

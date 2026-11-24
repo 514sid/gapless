@@ -172,6 +172,9 @@ GaplessAsset(
     fit = GaplessFit.Contain,             // Contain (default), Cover, Stretch or Original
     backgroundColor = 0xFF000000.toInt(), // ARGB colour of the bars around contained content
 
+    // Animated images only
+    animationLoops = 3,      // optional; play 3 times, hold the last frame, emit Completed
+
     // Video only
     durationMs = 10_000,     // optional; clip the video so the next one can preload early
 
@@ -182,7 +185,7 @@ GaplessAsset(
 
 `mimeType` picks the renderer: `video/*` and HLS, DASH, SmoothStreaming or RTSP stream types play in
 ExoPlayer, `image/*` in Coil, and `text/html` or `application/xhtml+xml` in a WebView. Matching ignores case
-and parameters. Any other type, an out-of-range `volume`, or a non-positive `durationMs` or `refreshIntervalMs`
+and parameters. Any other type, an out-of-range `volume`, or a non-positive `durationMs`, `refreshIntervalMs` or `animationLoops`
 makes `start`, `prepareNext` and `play` throw `IllegalArgumentException`.
 
 **`durationMs` (video only).** Without it, a clip plays its full natural length and ExoPlayer only begins
@@ -217,12 +220,19 @@ of the panel's. Images are decoded whole for it, so keep them no larger than nee
 `backgroundColor` is ARGB and defaults to opaque black. Both fields are per asset, so each item you play brings its own: a white still can sit on
 white bars while the video after it keeps black ones. Web pages lay themselves out and ignore both fields.
 
+**Animated images and SVG.** GIF, animated WebP and SVG load like any other image. Animated WebP needs
+Android 9 or newer; older versions show its first frame. An animation always starts from its first frame when
+it comes on screen, even if its preload decoded it long before. By default it loops until the next `play()`.
+With `animationLoops` it plays that many times, stops on its last frame and emits `Completed`, as a video does
+at its end, so the host can move on right away. SVG is drawn at the size the image is shown at, so it stays
+sharp at any size.
+
 **MIME type to renderer mapping:**
 
 | MIME type | Renderer |
 | :-------- | :------- |
 | `video/*`, HLS, DASH, RTSP | ExoPlayer |
-| `image/*` | Coil |
+| `image/*`, including GIF, animated WebP and SVG | Coil |
 | anything else | WebView |
 
 ---

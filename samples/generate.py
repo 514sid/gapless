@@ -285,6 +285,55 @@ def render_image(img, index, out_dir):
         im.save(path, "PNG", optimize=True)
 
 
+# Animated images and vector graphics. Each animation frame shows its number, so a cut that
+# starts the animation part way through, or a loop count that isn't kept, shows on screen.
+
+ANIM_FRAMES = 12
+ANIM_FRAME_MS = 100
+ANIMATIONS = [
+    dict(id="image_animated_gif", fmt="gif", w=640, h=360),
+    dict(id="image_animated_webp", fmt="webp", w=640, h=360),
+]
+ANIM_MIME = {"gif": "image/gif", "webp": "image/webp"}
+
+
+def render_animation(anim, index, out_dir):
+    w, h = anim["w"], anim["h"]
+    color = PALETTE[(index + 2) % len(PALETTE)]
+    u = min(w, h) / 1080
+    frames = []
+    for n in range(1, ANIM_FRAMES + 1):
+        im = Image.new("RGB", (w, h), color)
+        d = ImageDraw.Draw(im)
+        border(d, w, h, max(3, int(12 * u)), WHITE)
+        title = f"Animated {anim['fmt'].upper()}  {w} x {h}"
+        label(d, (w / 2, 40 * u), title, fitted(title, w * 0.9, 96 * u), anchor="ma")
+        big = f"{n} / {ANIM_FRAMES}"
+        label(d, (w / 2, h / 2 + 40 * u), big, fitted(big, w * 0.8, 360 * u), anchor="mm")
+        # A bar that fills over the loop, so a stopped animation shows where it stopped.
+        bar_y = h - int(120 * u)
+        d.rectangle([int(60 * u), bar_y, int(60 * u + (w - 120 * u) * n / ANIM_FRAMES), bar_y + int(40 * u)], fill=WHITE)
+        frames.append(im)
+    path = os.path.join(out_dir, f"{anim['id']}.{anim['fmt']}")
+    if anim["fmt"] == "gif":
+        frames[0].save(path, "GIF", save_all=True, append_images=frames[1:], duration=ANIM_FRAME_MS,
+                       loop=0, optimize=True)
+    else:
+        frames[0].save(path, "WEBP", save_all=True, append_images=frames[1:], duration=ANIM_FRAME_MS,
+                       loop=0, quality=80, method=6)
+
+
+SVG_IMAGE = """<svg xmlns="http://www.w3.org/2000/svg" width="1920" height="1080" viewBox="0 0 1920 1080">
+  <rect width="1920" height="1080" fill="#2a6f97"/>
+  <rect x="6" y="6" width="1908" height="1068" fill="none" stroke="#fff" stroke-width="12"/>
+  <circle cx="480" cy="540" r="260" fill="#f4a261"/>
+  <polygon points="1440,280 1700,800 1180,800" fill="#e9c46a"/>
+  <text x="960" y="200" font-family="sans-serif" font-size="96" fill="#fff" text-anchor="middle">Image  SVG  1920 x 1080</text>
+  <text x="960" y="980" font-family="sans-serif" font-size="140" fill="#fff" text-anchor="middle">Vector image</text>
+</svg>
+"""
+
+
 # Broken assets. Each should end in an error event, and the player should carry on with the
 # next asset instead of crashing or stalling.
 
@@ -499,6 +548,9 @@ PLAYLISTS = {
     "mixed": ["h264_1080p30", "image_1920x1080_jpg", "web_timer", "hevc_1080p30",
               "image_8000x6000_huge_jpg", "vp9_1080p30", "image_1920x1080_alpha_png"],
     "portrait": ["h264_1080x1920p30_portrait", "image_1080x1920_portrait_jpg"],
+    # Animations start from their first frame at each cut; the 3-loop one stops on its last frame.
+    "animated": ["image_animated_gif", "h264_1080p30", "image_animated_gif_3_loops",
+                 "image_animated_webp", "image_svg", "image_1920x1080_jpg"],
     # A day-long run: every codec, frame rate and image type, a web page, short clips back to
     # back, and a few broken assets spread through, so each loop exercises the failure paths too.
     # About two minutes a loop; 4K clips drop out on Full HD devices.
@@ -550,6 +602,21 @@ def main():
         assets.append(dict(id=img["id"], file=f"{img['id']}.{img['fmt']}",
                            mimeType=IMAGE_MIME[img["fmt"]], width=img["w"], height=img["h"],
                            durationMs=IMAGE_SECONDS * 1000))
+    for i, anim in enumerate(ANIMATIONS):
+        if wanted(anim["id"]):
+            print(f"animation {anim['id']}", flush=True)
+            render_animation(anim, i, args.out)
+        assets.append(dict(id=anim["id"], file=f"{anim['id']}.{anim['fmt']}",
+                           mimeType=ANIM_MIME[anim["fmt"]], width=anim["w"], height=anim["h"],
+                           durationMs=IMAGE_SECONDS * 1000))
+    # The same GIF played three times, held on its last frame for the rest of a 6 second slot.
+    assets.append(dict(id="image_animated_gif_3_loops", file="image_animated_gif.gif",
+                       mimeType="image/gif", width=640, height=360, durationMs=6000,
+                       animationLoops=3))
+    with open(os.path.join(args.out, "image_svg.svg"), "w") as fh:
+        fh.write(SVG_IMAGE)
+    assets.append(dict(id="image_svg", file="image_svg.svg", mimeType="image/svg+xml",
+                       width=1920, height=1080, durationMs=IMAGE_SECONDS * 1000))
     # The web page is hand-written.
     shutil.copy(os.path.join(ROOT, "samples", "web_timer.html"), args.out)
     assets.append(dict(id="web_timer", file="web_timer.html", mimeType="text/html",

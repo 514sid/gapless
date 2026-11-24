@@ -49,6 +49,7 @@ With no extra, the app plays `mixed`. The playlist in use, and whether 4K is on,
 | `images` | Every image format and size |
 | `mixed` | Video, image and web page in turn, including the 8000x6000 JPEG and the transparent PNG |
 | `portrait` | A 1080x1920 clip and image |
+| `animated` | Looping GIF, the same GIF played 3 times, animated WebP and SVG, with a clip and a still between them |
 | `split_720p` | H.264, HEVC and VP9 at 720p, for two players side by side (`--ei players 2`) |
 | `soak` | A two-minute loop of every working codec, frame rate and image type, the web page, short clips back to back and three broken assets, for long runs |
 | `websites` | 16 real websites, 15 seconds each, with a video or image between them (needs a network) |
@@ -86,6 +87,8 @@ AV1 needs a hardware decoder or Media3's AV1 extension. On a device without one,
 ### Images
 
 Each is shown for 4 seconds: JPEG, PNG and WebP at 1920x1080, a 1080x1920 portrait JPEG, a 3840x2160 JPEG, an 8000x6000 JPEG that has to be downsampled, a 640x360 PNG that is scaled up, and a 1920x1080 PNG whose left half is transparent.
+
+The animations, `image_animated_gif` and `image_animated_webp`, are 640x360 and count 1 to 12 over 1.2 seconds, with a bar that fills as they go. Each cut should start them at 1. `image_animated_gif_3_loops` is the same GIF with `animationLoops` set to 3: it stops on 12 after 3.6 seconds and logs `Completed`, then holds for the rest of its 6-second slot. `image_svg` is a 1920x1080 vector image.
 
 ### Web
 

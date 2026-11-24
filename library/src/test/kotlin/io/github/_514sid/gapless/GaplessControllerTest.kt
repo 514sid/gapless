@@ -507,6 +507,20 @@ class GaplessControllerTest {
         assertEquals(Framing(), (plain as PlaybackItem.Video).framing)
     }
 
+    @Test
+    fun `an animated image's loop count reaches what it plays as`() = runTest {
+        val h = Harness(this)
+        runCurrent()
+
+        h.controller.prepareNext(GaplessAsset("g", "a.gif", "image/gif", animationLoops = 3))
+        h.controller.prepareNext(GaplessAsset("s", "b.svg", "image/svg+xml"))
+        runCurrent()
+
+        val (gif, svg) = h.prepares.map { it as PlaybackItem.Image }
+        assertEquals(3, gif.animationLoops)
+        assertNull(svg.animationLoops)
+    }
+
     // Validation
 
     @Test
@@ -520,6 +534,9 @@ class GaplessControllerTest {
         assertThrows<IllegalArgumentException> { controller.play(video("a").copy(durationMs = 0)) }
         assertThrows<IllegalArgumentException> {
             controller.play(GaplessAsset("w", "https://example.com", "text/html", refreshIntervalMs = -1))
+        }
+        assertThrows<IllegalArgumentException> {
+            controller.play(GaplessAsset("g", "a.gif", "image/gif", animationLoops = 0))
         }
     }
 }

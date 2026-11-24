@@ -34,6 +34,8 @@ androidx-media3-exoplayer-rtsp       = { group = "androidx.media3",             
 androidx-webkit                      = { group = "androidx.webkit",              name = "webkit",                           version.ref = "androidx-webkit" }
 coil-compose                         = { group = "io.coil-kt.coil3",            name = "coil-compose",                     version.ref = "coil"       }
 coil-network-okhttp                  = { group = "io.coil-kt.coil3",            name = "coil-network-okhttp",              version.ref = "coil"       }
+coil-gif                             = { group = "io.coil-kt.coil3",            name = "coil-gif",                         version.ref = "coil"       }
+coil-svg                             = { group = "io.coil-kt.coil3",            name = "coil-svg",                         version.ref = "coil"       }
 androidx-test-runner                 = { group = "androidx.test",              name = "runner",  version.ref = "androidx-test"     }
 androidx-test-ext-junit              = { group = "androidx.test.ext",           name = "junit",   version.ref = "androidx-test-ext" }
 junit-bom                            = { group = "org.junit", name = "junit-bom", version.ref = "junit5" }

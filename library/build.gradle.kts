@@ -61,6 +61,8 @@ dependencies {
     implementation(libs.androidx.webkit)
     implementation(libs.coil.compose)
     implementation(libs.coil.network.okhttp)
+    implementation(libs.coil.gif)
+    implementation(libs.coil.svg)
 
     testImplementation(platform(libs.junit.bom))
     testImplementation(libs.junit.jupiter)

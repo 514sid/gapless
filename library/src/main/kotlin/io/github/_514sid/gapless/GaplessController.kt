@@ -129,7 +129,7 @@ public class GaplessController(
      * Begins playback with [asset]: buffers it for [preloadMs], then shows it.
      *
      * @throws IllegalArgumentException if [asset] fails validation (blank id or uri, unsupported
-     * mimeType, volume outside 0..1, non-positive durationMs or refreshIntervalMs).
+     * mimeType, volume outside 0..1, non-positive durationMs, refreshIntervalMs or animationLoops).
      */
     public fun start(asset: GaplessAsset) {
         validateAsset(asset)
@@ -140,7 +140,7 @@ public class GaplessController(
      * Starts buffering [asset] so a later [play] of it can cut immediately.
      *
      * @throws IllegalArgumentException if [asset] fails validation (blank id or uri, unsupported
-     * mimeType, volume outside 0..1, non-positive durationMs or refreshIntervalMs).
+     * mimeType, volume outside 0..1, non-positive durationMs, refreshIntervalMs or animationLoops).
      */
     public fun prepareNext(asset: GaplessAsset) {
         validateAsset(asset)
@@ -156,7 +156,7 @@ public class GaplessController(
      * on screen, or in [GaplessEvent.PlaybackError] if it fails after the cut but before it shows.
      *
      * @throws IllegalArgumentException if [asset] fails validation (blank id or uri, unsupported
-     * mimeType, volume outside 0..1, non-positive durationMs or refreshIntervalMs).
+     * mimeType, volume outside 0..1, non-positive durationMs, refreshIntervalMs or animationLoops).
      */
     public fun play(asset: GaplessAsset) {
         validateAsset(asset)
@@ -176,7 +176,7 @@ public class GaplessController(
      * isn't sped up again. This is how devices sharing a clock stay in step. Ignored for images and
      * web pages, which have no timeline of their own: call [play] at the moment they should appear.
      * @throws IllegalArgumentException if [asset] fails validation (blank id or uri, unsupported
-     * mimeType, volume outside 0..1, non-positive durationMs or refreshIntervalMs).
+     * mimeType, volume outside 0..1, non-positive durationMs, refreshIntervalMs or animationLoops).
      */
     @ExperimentalGaplessApi
     public fun play(asset: GaplessAsset, startAtMs: Long) {
@@ -440,6 +440,7 @@ public class GaplessController(
         require(asset.volume in 0f..1f) { "Asset \"${asset.id}\" volume ${asset.volume} is outside 0.0..1.0" }
         asset.durationMs?.let { require(it > 0) { "Asset \"${asset.id}\" durationMs must be positive" } }
         asset.refreshIntervalMs?.let { require(it > 0) { "Asset \"${asset.id}\" refreshIntervalMs must be positive" } }
+        asset.animationLoops?.let { require(it > 0) { "Asset \"${asset.id}\" animationLoops must be positive" } }
         asset.javaScriptOrigins?.let { origins ->
             require(origins.isNotEmpty() && origins.none { it.isBlank() }) {
                 "Asset \"${asset.id}\" javaScriptOrigins must name at least one origin, or be null"
@@ -462,6 +463,7 @@ public class GaplessController(
                 width = g.width ?: 1920,
                 height = g.height ?: 1080,
                 framing = Framing(g.fit, g.backgroundColor),
+                animationLoops = g.animationLoops,
             )
             else -> PlaybackItem.Web(
                 url = g.uri,

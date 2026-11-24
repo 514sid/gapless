@@ -87,6 +87,7 @@ class SampleManifest(
                     fit = a.optString("fit").takeIf { it.isNotEmpty() }?.let(::parseFit) ?: GaplessFit.Contain,
                     backgroundColor = a.optString("background").takeIf { it.isNotEmpty() }
                         ?.let(::parseColor) ?: 0xFF000000.toInt(),
+                    animationLoops = a.optInt("animationLoops").takeIf { it > 0 },
                 )
             }
             val lists = json.getJSONObject("playlists")

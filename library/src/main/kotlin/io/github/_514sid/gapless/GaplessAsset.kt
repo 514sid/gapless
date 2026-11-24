@@ -40,6 +40,11 @@ package io.github._514sid.gapless
  * @property backgroundColor Videos and images only: the colour of the bars around content that
  * doesn't fill the player, as ARGB, such as `0xFF202020.toInt()` or `Color.White.toArgb()`.
  * Defaults to opaque black. A transparent colour shows black, the player's own background.
+ * @property animationLoops Animated images only (GIF, and animated WebP on Android 9 and up): how
+ * many times the animation plays. Null, the default, loops it until the next
+ * [GaplessController.play]. With a count it plays that many times from its first frame, stops on
+ * its last, and [GaplessEvent.Completed] is emitted, as for a video that reaches its end. Ignored
+ * for still images, videos and web pages.
  */
 public data class GaplessAsset(
     val id: String,
@@ -55,6 +60,7 @@ public data class GaplessAsset(
     val waitForPageReady: Boolean = false,
     val fit: GaplessFit = GaplessFit.Contain,
     val backgroundColor: Int = 0xFF000000.toInt(),
+    val animationLoops: Int? = null,
 ) {
     private companion object {
         const val MIME_PREFIX_VIDEO = "video/"

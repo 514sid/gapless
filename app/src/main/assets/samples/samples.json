@@ -211,6 +211,39 @@
       "uri": "file:///android_asset/samples/image_1920x1080_alpha_png.png"
     },
     {
+      "id": "image_animated_gif",
+      "mimeType": "image/gif",
+      "width": 640,
+      "height": 360,
+      "durationMs": 4000,
+      "uri": "file:///android_asset/samples/image_animated_gif.gif"
+    },
+    {
+      "id": "image_animated_webp",
+      "mimeType": "image/webp",
+      "width": 640,
+      "height": 360,
+      "durationMs": 4000,
+      "uri": "file:///android_asset/samples/image_animated_webp.webp"
+    },
+    {
+      "id": "image_animated_gif_3_loops",
+      "mimeType": "image/gif",
+      "width": 640,
+      "height": 360,
+      "durationMs": 6000,
+      "animationLoops": 3,
+      "uri": "file:///android_asset/samples/image_animated_gif.gif"
+    },
+    {
+      "id": "image_svg",
+      "mimeType": "image/svg+xml",
+      "width": 1920,
+      "height": 1080,
+      "durationMs": 4000,
+      "uri": "file:///android_asset/samples/image_svg.svg"
+    },
+    {
       "id": "web_timer",
       "mimeType": "text/html",
       "durationMs": 6000,
@@ -549,6 +582,14 @@
       "h264_1080x1920p30_portrait",
       "image_1080x1920_portrait_jpg"
     ],
+    "animated": [
+      "image_animated_gif",
+      "h264_1080p30",
+      "image_animated_gif_3_loops",
+      "image_animated_webp",
+      "image_svg",
+      "image_1920x1080_jpg"
+    ],
     "soak": [
       "h264_1080p30",
       "image_1920x1080_jpg",
@@ -673,6 +714,10 @@
       "image_8000x6000_huge_jpg",
       "image_640x360_small_png",
       "image_1920x1080_alpha_png",
+      "image_animated_gif",
+      "image_animated_webp",
+      "image_animated_gif_3_loops",
+      "image_svg",
       "web_timer",
       "web_wikipedia",
       "web_hacker_news",

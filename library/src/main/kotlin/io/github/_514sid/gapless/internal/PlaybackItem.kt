@@ -29,6 +29,8 @@ internal sealed class PlaybackItem {
         val width: Int,
         val height: Int,
         val framing: Framing = Framing(),
+        /** How many times an animated image plays; null loops it until it is cut away from. */
+        val animationLoops: Int? = null,
     ) : PlaybackItem()
 
     /**
