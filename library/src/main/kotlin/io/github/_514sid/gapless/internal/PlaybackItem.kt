@@ -9,15 +9,16 @@ internal sealed class PlaybackItem {
     var assetId: String = ""
 
     /**
-     * @param aspectRatioHint Width / height from the asset's declared size, used to lay out the
-     * slot before the decoder reports the real video size. Null when the asset declared no size.
+     * @param sizeHint The asset's declared size, used to lay out the slot before the decoder
+     * reports the real video size. Null when the asset declared no size.
      */
     data class Video(
         val uri: String,
         val mimeType: String,
-        val aspectRatioHint: Float? = null,
+        val sizeHint: ContentSize? = null,
         val volume: Float = 0f,
         val durationMs: Long? = null,
+        val framing: Framing = Framing(),
     ) : PlaybackItem() {
         /** Set at play time when the host gave a start time; null plays unanchored. */
         @Volatile var timeline: VideoTimeline? = null
@@ -26,7 +27,8 @@ internal sealed class PlaybackItem {
     data class Image(
         val model: Any,
         val width: Int,
-        val height: Int
+        val height: Int,
+        val framing: Framing = Framing(),
     ) : PlaybackItem()
 
     /**

@@ -22,6 +22,8 @@ import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
 import io.github._514sid.gapless.GaplessVideoConfig
+import io.github._514sid.gapless.internal.ContentSize
+import io.github._514sid.gapless.internal.Framing
 import io.github._514sid.gapless.internal.PlaybackItem
 import java.util.UUID
 import java.util.concurrent.atomic.AtomicBoolean
@@ -192,13 +194,22 @@ internal class DualVideoStateMachine(
         if (slot == 0) readyA = value else readyB = value
     }
 
-    private fun aspect(slot: Int) = if (slot == 0) renderState.aspectRatioA else renderState.aspectRatioB
+    private fun size(slot: Int) = if (slot == 0) renderState.sizeA else renderState.sizeB
 
-    private fun setAspect(slot: Int, value: Float?) {
+    private fun setSize(slot: Int, value: ContentSize?) {
         renderState = if (slot == 0) {
-            renderState.copy(aspectRatioA = value)
+            renderState.copy(sizeA = value)
         } else {
-            renderState.copy(aspectRatioB = value)
+            renderState.copy(sizeB = value)
+        }
+    }
+
+    private fun setFraming(slot: Int, value: Framing?) {
+        val framing = value ?: Framing()
+        renderState = if (slot == 0) {
+            renderState.copy(framingA = framing)
+        } else {
+            renderState.copy(framingB = framing)
         }
     }
 
@@ -243,7 +254,10 @@ internal class DualVideoStateMachine(
         deferred[slot] = false
         setReady(slot, false)
         // During a hard cut the inactive slot is still the one on screen; leave its layout alone.
-        if (!isFrozen(slot)) setAspect(slot, item.aspectRatioHint)
+        if (!isFrozen(slot)) {
+            setSize(slot, item.sizeHint)
+            setFraming(slot, item.framing)
+        }
 
         val p = players[slot]
         p.volume = 0f
@@ -288,7 +302,10 @@ internal class DualVideoStateMachine(
             deferred[target] = false
             setReady(target, false)
             clearSlot(old, keepFrame = true)
-            if (aspect(target) == null) setAspect(target, item.aspectRatioHint)
+            if (size(target) == null) {
+                setSize(target, item.sizeHint)
+                setFraming(target, item.framing)
+            }
             pendingFlip = target
             cutRetryUsed = false
             p.prepare()
@@ -332,7 +349,8 @@ internal class DualVideoStateMachine(
         renderState = renderState.copy(activeSlot = slot)
         // The slot just hidden was frozen on the old clip's frame; it may since have been given
         // the next item, whose own declared ratio applies.
-        setAspect(other, items[other]?.aspectRatioHint)
+        setSize(other, items[other]?.sizeHint)
+        setFraming(other, items[other]?.framing)
     }
 
     /**
@@ -354,7 +372,10 @@ internal class DualVideoStateMachine(
         p.clearMediaItems()
         p.playWhenReady = false
         setReady(slot, false)
-        if (!keepFrame) setAspect(slot, null)
+        if (!keepFrame) {
+            setSize(slot, null)
+            setFraming(slot, null)
+        }
     }
 
     private fun onPlayerError(slot: Int, error: PlaybackException) {
@@ -679,7 +700,7 @@ internal class DualVideoStateMachine(
                     // TextureView stretches frames to its bounds, so the slot has to carry the real ratio.
                     override fun onVideoSizeChanged(videoSize: VideoSize) {
                         if (isFrozen(slot)) return
-                        videoSize.displayAspectRatio()?.let { setAspect(slot, it) }
+                        videoSize.displaySize()?.let { setSize(slot, it) }
                     }
                     override fun onTracksChanged(tracks: Tracks) = onTracksChanged(slot, tracks)
                     override fun onPlayerError(error: PlaybackException) = onPlayerError(slot, error)

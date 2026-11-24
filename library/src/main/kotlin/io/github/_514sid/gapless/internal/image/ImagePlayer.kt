@@ -10,6 +10,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import coil3.compose.AsyncImage
+import io.github._514sid.gapless.internal.Framing
 import java.util.UUID
 
 /**
@@ -20,6 +21,7 @@ internal data class ImageSlotState(
     val model: Any?,
     val playbackId: UUID? = null,
     val loaded: Boolean = true,
+    val framing: Framing = Framing(),
 )
 
 internal data class ImagePlayerState(
@@ -68,16 +70,16 @@ private fun ImageSlot(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color.Black)
             .graphicsLayer {
                 alpha = if (isActive) 1f else 0f
-            },
+            }
+            .background(Color(slot?.framing?.backgroundColor ?: Framing.BLACK)),
         contentAlignment = Alignment.Center
     ) {
         AsyncImage(
             model = slot?.takeIf { it.loaded }?.model,
             contentDescription = null,
-            contentScale = ContentScale.Fit,
+            contentScale = slot?.framing?.contentScale ?: ContentScale.Fit,
             modifier = Modifier.fillMaxSize(),
             onSuccess = { if (slot != null) onDisplayed(slot) },
             onError = { error ->

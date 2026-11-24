@@ -1,5 +1,6 @@
 package io.github._514sid.gapless.internal.video
 
+import io.github._514sid.gapless.internal.ContentSize
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MimeTypes
 import androidx.media3.common.VideoSize
@@ -39,6 +40,5 @@ private fun normalizeMimeType(mimeType: String): String =
         else -> base
     }
 
-/** Display aspect ratio of a decoded video, or null while the size is still unknown. */
-internal fun VideoSize.displayAspectRatio(): Float? =
-    if (width > 0 && height > 0) width * pixelWidthHeightRatio / height else null
+/** Display size of a decoded video, or null while the size is still unknown. */
+internal fun VideoSize.displaySize(): ContentSize? = ContentSize.of(width * pixelWidthHeightRatio, height)

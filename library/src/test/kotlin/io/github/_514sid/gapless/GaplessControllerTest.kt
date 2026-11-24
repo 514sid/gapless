@@ -1,5 +1,7 @@
 package io.github._514sid.gapless
 
+import io.github._514sid.gapless.internal.ContentSize
+import io.github._514sid.gapless.internal.Framing
 import io.github._514sid.gapless.internal.PlaybackItem
 import io.github._514sid.gapless.internal.PlayerCommand
 import kotlinx.coroutines.Dispatchers
@@ -474,7 +476,7 @@ class GaplessControllerTest {
     }
 
     @Test
-    fun `video aspect hint comes from declared size and is absent without one`() = runTest {
+    fun `video size hint comes from declared size and is absent without one`() = runTest {
         val h = Harness(this)
         runCurrent()
 
@@ -483,9 +485,26 @@ class GaplessControllerTest {
         runCurrent()
 
         val (portrait, unknown) = h.prepares.map { it as PlaybackItem.Video }
-        assertEquals(1080f / 1920f, portrait.aspectRatioHint)
+        assertEquals(ContentSize(1080f, 1920f), portrait.sizeHint)
         assertEquals("video/mp4", portrait.mimeType)
-        assertNull(unknown.aspectRatioHint)
+        assertNull(unknown.sizeHint)
+    }
+
+    @Test
+    fun `each asset's fit and background reach what it plays as`() = runTest {
+        val h = Harness(this)
+        runCurrent()
+        val white = 0xFFFFFFFF.toInt()
+
+        h.controller.prepareNext(video("v").copy(fit = GaplessFit.Cover, backgroundColor = white))
+        h.controller.prepareNext(GaplessAsset("i", "photo.jpg", "image/jpeg", fit = GaplessFit.Original))
+        h.controller.prepareNext(video("plain"))
+        runCurrent()
+
+        val (v, i, plain) = h.prepares
+        assertEquals(Framing(GaplessFit.Cover, white), (v as PlaybackItem.Video).framing)
+        assertEquals(Framing(GaplessFit.Original), (i as PlaybackItem.Image).framing)
+        assertEquals(Framing(), (plain as PlaybackItem.Video).framing)
     }
 
     // Validation

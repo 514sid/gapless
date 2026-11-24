@@ -1,7 +1,9 @@
 package io.github._514sid.gapless.internal
 
 import android.content.Context
+import io.github._514sid.gapless.GaplessFit
 import io.mockk.mockk
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.test.runTest
@@ -24,7 +26,7 @@ class ImageStateMachineTest {
         machine = ImageStateMachine(
             context = mockk<Context>(relaxed = true),
             scope = TestScope(),
-            loadImage = { _, _, _ -> }
+            loadImage = { _, _, _, _ -> }
         )
     }
 
@@ -173,7 +175,7 @@ class ImageStateMachineTest {
         machine = ImageStateMachine(
             context = mockk(relaxed = true),
             scope = this,
-            loadImage = { _, w, h ->
+            loadImage = { _, w, h, _ ->
                 widthDeferred.complete(w)
                 heightDeferred.complete(h)
             }
@@ -195,7 +197,7 @@ class ImageStateMachineTest {
         machine = ImageStateMachine(
             context = mockk(relaxed = true),
             scope = this,
-            loadImage = { _, w, h ->
+            loadImage = { _, w, h, _ ->
                 widthDeferred.complete(w)
                 heightDeferred.complete(h)
             }
@@ -217,7 +219,7 @@ class ImageStateMachineTest {
         machine = ImageStateMachine(
             context = mockk(relaxed = true),
             scope = this,
-            loadImage = { _, w, h ->
+            loadImage = { _, w, h, _ ->
                 widthDeferred.complete(w)
                 heightDeferred.complete(h)
             }
@@ -239,7 +241,7 @@ class ImageStateMachineTest {
         machine = ImageStateMachine(
             context = mockk(relaxed = true),
             scope = this,
-            loadImage = { _, w, h ->
+            loadImage = { _, w, h, _ ->
                 widthDeferred.complete(w)
                 heightDeferred.complete(h)
             }
@@ -261,7 +263,7 @@ class ImageStateMachineTest {
         machine = ImageStateMachine(
             context = mockk(relaxed = true),
             scope = this,
-            loadImage = { _, _, _ ->
+            loadImage = { _, _, _, _ ->
                 try {
                     startedDeferred.complete(Unit)
                     awaitCancellation()
@@ -288,7 +290,7 @@ class ImageStateMachineTest {
         machine = ImageStateMachine(
             context = mockk(relaxed = true),
             scope = this,
-            loadImage = { _, _, _ ->
+            loadImage = { _, _, _, _ ->
                 try {
                     startedDeferred.complete(Unit)
                     awaitCancellation()
@@ -315,7 +317,7 @@ class ImageStateMachineTest {
         machine = ImageStateMachine(
             context = mockk(relaxed = true),
             scope = this,
-            loadImage = { _, _, _ -> release.await() },
+            loadImage = { _, _, _, _ -> release.await() },
         )
         machine.updateContainerSize(1920, 1080)
         machine.prepare(imageItem("photo.jpg"))
@@ -348,7 +350,7 @@ class ImageStateMachineTest {
         machine = ImageStateMachine(
             context = mockk(relaxed = true),
             scope = this,
-            loadImage = { _, w, h -> size.complete(w to h) },
+            loadImage = { _, w, h, _ -> size.complete(w to h) },
         )
         machine.prepare(imageItem("photo.jpg"))
         machine.updateContainerSize(1080, 1920)
@@ -440,5 +442,37 @@ class ImageStateMachineTest {
 
         machine.onDisplayError(old, "late failure")
         assertTrue(reported.isEmpty())
+    }
+
+    // Framing
+
+    @Test
+    fun `slots carry the image's framing`() {
+        val cover = Framing(GaplessFit.Cover, 0xFF123456.toInt())
+        val item = PlaybackItem.Image("photo.jpg", 1920, 1080, cover)
+        machine.prepare(item)
+        assertEquals(cover, machine.renderState.slotB?.framing)
+        machine.play(item)
+        assertEquals(cover, machine.renderState.slotB?.framing)
+
+        val plain = imageItem("other.jpg")
+        machine.play(plain)
+        assertEquals(Framing(), machine.renderState.slotA?.framing)
+    }
+
+    @Test
+    fun `the preload decodes as the slot will show the image`() = runTest {
+        val fits = Channel<GaplessFit>(Channel.UNLIMITED)
+        machine = ImageStateMachine(
+            context = mockk(relaxed = true),
+            scope = this,
+            loadImage = { _, _, _, fit -> fits.send(fit) },
+        )
+        machine.updateContainerSize(1920, 1080)
+        val decoded = GaplessFit.entries.map { fit ->
+            machine.prepare(PlaybackItem.Image("$fit.jpg", 1920, 1080, Framing(fit)))
+            fits.receive()
+        }
+        assertEquals(GaplessFit.entries, decoded)
     }
 }
