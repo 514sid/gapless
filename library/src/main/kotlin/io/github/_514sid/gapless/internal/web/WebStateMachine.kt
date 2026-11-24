@@ -22,6 +22,8 @@ import androidx.webkit.ScriptHandler
 import androidx.webkit.WebViewCompat
 import androidx.webkit.WebViewFeature
 import io.github._514sid.gapless.GaplessWebConfig
+import io.github._514sid.gapless.internal.ContentSize
+import io.github._514sid.gapless.internal.Framing
 import io.github._514sid.gapless.internal.PlaybackItem
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
@@ -80,8 +82,8 @@ internal class WebStateMachine(
     /** The page each slot is loading or showing, for its script and readiness; null when blank. */
     private val slotItems = arrayOfNulls<PlaybackItem.Web>(2)
 
-    /** Per slot: the document-start script registered for its page, removed when the page goes. */
-    private val scriptHandlers = arrayOfNulls<ScriptHandler>(2)
+    /** Per slot: the document-start scripts registered for its page, removed when the page goes. */
+    private val scriptHandlers = arrayOf(mutableListOf<ScriptHandler>(), mutableListOf<ScriptHandler>())
 
     /** Per slot: the page has painted. */
     private val painted = BooleanArray(2)
@@ -173,19 +175,26 @@ internal class WebStateMachine(
      * the next one.
      */
     private fun setSlotItem(slot: Int, item: PlaybackItem.Web?) {
-        scriptHandlers[slot]?.remove()
-        scriptHandlers[slot] = null
+        scriptHandlers[slot].forEach { it.remove() }
+        scriptHandlers[slot].clear()
         slotItems[slot] = item
         painted[slot] = false
         pageReady[slot] = false
+        setLayout(slot, WebLayout(item?.viewport, item?.framing ?: Framing()))
         val view = views[slot] ?: return
-        val script = item?.javaScript ?: return
+        val scripts = listOfNotNull(
+            item?.viewport?.let { viewportScript(it) to setOf("*") },
+            item?.javaScript?.let { it to item.javaScriptOrigins },
+        )
+        if (scripts.isEmpty()) return
         if (documentStartScripts) {
-            try {
-                scriptHandlers[slot] = WebViewCompat.addDocumentStartJavaScript(view, script, item.javaScriptOrigins)
-            } catch (e: IllegalArgumentException) {
-                // A malformed origin rule. The page plays without its script rather than not at all.
-                Log.e(TAG, "Can't add the script for ${item.assetId}: ${e.message}")
+            for ((script, origins) in scripts) {
+                try {
+                    scriptHandlers[slot] += WebViewCompat.addDocumentStartJavaScript(view, script, origins)
+                } catch (e: IllegalArgumentException) {
+                    // A malformed origin rule. The page plays without its script rather than not at all.
+                    Log.e(TAG, "Can't add the script for ${item?.assetId}: ${e.message}")
+                }
             }
         } else if (!scriptFallbackWarned) {
             scriptFallbackWarned = true
@@ -194,6 +203,10 @@ internal class WebStateMachine(
     }
 
     private var scriptFallbackWarned = false
+
+    private fun setLayout(slot: Int, layout: WebLayout) {
+        renderState = if (slot == 0) renderState.copy(layoutA = layout) else renderState.copy(layoutB = layout)
+    }
 
     /** Whether [url] is in one of [origins], as the document start script rules match it. */
     private fun originAllowed(url: String, origins: Set<String>): Boolean {
@@ -449,7 +462,8 @@ internal class WebStateMachine(
         view.destroy()
         views[slot] = null
         loadedUrls[slot] = null
-        scriptHandlers[slot] = null // went with the destroyed WebView
+        scriptHandlers[slot].clear() // went with the destroyed WebView
+        setLayout(slot, WebLayout())
         slotItems[slot] = null
         painted[slot] = false
         pageReady[slot] = false
@@ -484,8 +498,6 @@ internal class WebStateMachine(
         logDebug("createWebView(): Instantiating slot $slot")
         setBackgroundColor(android.graphics.Color.BLACK)
 
-        setInitialScale(100)
-
         webViewClient = object : WebViewClient() {
             override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
                 logDebug("${view.slotName()} redirecting to: ${request.url}")
@@ -500,9 +512,12 @@ internal class WebStateMachine(
                     if (slot < 0) return
                     val item = slotItems[slot]
                     // Without document start scripts, this is the earliest the script can run.
-                    val script = item?.javaScript
-                    if (script != null && !documentStartScripts && originAllowed(url, item.javaScriptOrigins)) {
-                        view.evaluateJavascript(script, null)
+                    if (item != null && !documentStartScripts) {
+                        item.viewport?.let { view.evaluateJavascript(viewportScript(it), null) }
+                        val script = item.javaScript
+                        if (script != null && originAllowed(url, item.javaScriptOrigins)) {
+                            view.evaluateJavascript(script, null)
+                        }
                     }
                     painted[slot] = true
                     maybeCommit(slot)
@@ -574,4 +589,33 @@ internal class WebStateMachine(
         }
         this.loadData(BLANK_PAGE, "text/html", "UTF-8")
     }
+}
+
+/**
+ * Lays the page out [viewport] CSS pixels wide, whatever its own viewport tag says: sets
+ * every viewport tag to that width, adds one if there is none, and keeps them so if the page
+ * changes them. With wide viewport and overview mode on, WebView then zooms the page to the
+ * view's width. The view has the viewport's shape, so the height comes out right too.
+ */
+internal fun viewportScript(viewport: ContentSize): String {
+    val content = "width=${viewport.width.toInt()}"
+    return """
+        (function () {
+          if (window !== window.top) return;
+          var content = '$content';
+          function apply() {
+            var tags = document.querySelectorAll('meta[name="viewport"]');
+            if (!tags.length) {
+              var tag = document.createElement('meta');
+              tag.name = 'viewport';
+              (document.head || document.documentElement).appendChild(tag);
+              tags = [tag];
+            }
+            for (var i = 0; i < tags.length; i++) if (tags[i].content !== content) tags[i].content = content;
+          }
+          apply();
+          new MutationObserver(apply).observe(document.documentElement,
+              { childList: true, subtree: true, attributes: true, attributeFilter: ['content'] });
+        })();
+    """.trimIndent()
 }

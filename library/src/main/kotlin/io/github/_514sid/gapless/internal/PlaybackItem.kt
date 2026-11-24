@@ -36,6 +36,8 @@ internal sealed class PlaybackItem {
     /**
      * @param javaScript Run at the start of every document, in [javaScriptOrigins].
      * @param waitForReady Not ready to show until the page calls `gapless.ready()`.
+     * @param viewport The page's own size: it is laid out at this many CSS pixels and fitted to the
+     * player as [framing] says. Null lays it out at the player's size.
      */
     data class Web(
         val url: String,
@@ -43,5 +45,8 @@ internal sealed class PlaybackItem {
         val javaScript: String? = null,
         val javaScriptOrigins: Set<String> = emptySet(),
         val waitForReady: Boolean = false,
+        /** The size in CSS pixels to lay the page out at, scaled to the player; null fills it. */
+        val viewport: ContentSize? = null,
+        val framing: Framing = Framing(),
     ) : PlaybackItem()
 }

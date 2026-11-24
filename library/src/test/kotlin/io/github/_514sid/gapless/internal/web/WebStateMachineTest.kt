@@ -1,6 +1,9 @@
 package io.github._514sid.gapless.internal.web
 
 import androidx.test.core.app.ApplicationProvider
+import io.github._514sid.gapless.GaplessFit
+import io.github._514sid.gapless.internal.ContentSize
+import io.github._514sid.gapless.internal.Framing
 import io.github._514sid.gapless.internal.PlaybackItem
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestScope
@@ -137,6 +140,49 @@ class WebStateMachineTest {
 
         painted(view, item.url)
         assertEquals(script, shadowOf(view).lastEvaluatedJavascript)
+    }
+
+    // Pages laid out at their own size
+
+    @Test
+    fun `a page with a size is laid out at it and framed, and a blanked slot fills the player again`() {
+        val viewport = ContentSize(1920f, 1080f)
+        val framing = Framing(GaplessFit.Cover, 0xFFFFFFFF.toInt())
+        val item = PlaybackItem.Web("https://example.com/board", viewport = viewport, framing = framing)
+            .also { it.assetId = "board" }
+        machine.prepare(item)
+        assertEquals(WebLayout(viewport, framing), machine.renderState.layoutB)
+        assertEquals(WebLayout(), machine.renderState.layoutA)
+
+        machine.clear()
+        assertEquals(WebLayout(), machine.renderState.layoutB)
+    }
+
+    @Test
+    fun `without document start scripts, the viewport is set when the page paints, in any origin`() {
+        val viewport = ContentSize(1920f, 1080f)
+        val script = "document.body.style.background = 'red'"
+        val item = PlaybackItem.Web(
+            "https://example.com/board",
+            javaScript = script,
+            javaScriptOrigins = setOf("https://example.com"),
+            viewport = viewport,
+        ).also { it.assetId = "board" }
+        machine.prepare(item)
+        val view = machine.renderState.webViewB!!
+
+        painted(view, "https://login.other.com/")
+        assertEquals(viewportScript(viewport), shadowOf(view).lastEvaluatedJavascript)
+
+        painted(view, item.url)
+        assertEquals("the page's own script runs after it", script, shadowOf(view).lastEvaluatedJavascript)
+    }
+
+    @Test
+    fun `the viewport script sets the page's width in CSS pixels`() {
+        val script = viewportScript(ContentSize(1920f, 1080f))
+        assertTrue(script.contains("'width=1920'"))
+        assertTrue("it leaves frames alone", script.contains("window !== window.top"))
     }
 
     @Test

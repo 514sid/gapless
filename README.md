@@ -180,6 +180,7 @@ GaplessAsset(
 
     // Web assets only
     refreshIntervalMs = 60_000
+    // width and height on a web page: the CSS pixel size it is laid out at, then fitted
 )
 ```
 
@@ -218,7 +219,8 @@ says what to do about it:
 of the panel's. Images are decoded whole for it, so keep them no larger than needed.
 
 `backgroundColor` is ARGB and defaults to opaque black. Both fields are per asset, so each item you play brings its own: a white still can sit on
-white bars while the video after it keeps black ones. Web pages lay themselves out and ignore both fields.
+white bars while the video after it keeps black ones. Web pages follow both fields when they have a `width` and
+`height` (see [Laying a page out at its own size](#laying-a-page-out-at-its-own-size)), and otherwise fill the player.
 
 **Animated images and SVG.** GIF, animated WebP and SVG load like any other image. Animated WebP needs
 Android 9 or newer; older versions show its first frame. An animation always starts from its first frame when
@@ -472,6 +474,28 @@ ServiceWorkerController.getInstance().apply {
 ```
 
 Without this, service workers will fail to make network requests and the page will appear to load but never display content.
+
+### Laying a page out at its own size
+
+A page lays itself out at the player's size in CSS pixels, which is the player's size in pixels divided by the
+screen's density. A TV running its interface at 1280x720 with a density of 1.33 gives pages 960x540, so a
+dashboard designed for 1920x1080 wraps, overflows or shows its mobile layout.
+
+Give the asset the size it was designed for:
+
+```kotlin
+GaplessAsset(
+    id = "board", uri = "https://example.com/board", mimeType = "text/html",
+    width = 1920, height = 1080, // laid out at 1920x1080 CSS pixels on any screen
+)
+```
+
+The page then lays out at exactly that size and is scaled to the player, as `fit` says, with `backgroundColor`
+around it, just like an image of that size. The library sets the page's `<meta name="viewport">` to the width
+before the page's own scripts run, and keeps it there if the page changes it. The page still draws at the
+player's own resolution, so text stays sharp and nothing larger than the player is rendered (except with
+`Cover` or `Original`, where the parts outside the player are cut off). On WebView versions older than 87 the
+width is set when the page first paints, so the page may lay out once at the player's size first.
 
 ### Scripts in the page
 

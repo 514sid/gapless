@@ -471,6 +471,8 @@ public class GaplessController(
                 javaScript = g.javaScript?.takeIf { it.isNotBlank() },
                 javaScriptOrigins = g.javaScriptOrigins ?: defaultScriptOrigins(g.uri),
                 waitForReady = g.waitForPageReady,
+                viewport = ContentSize.of(g.width, g.height),
+                framing = Framing(g.fit, g.backgroundColor),
             )
         }
         item.assetId = g.id
