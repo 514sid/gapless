@@ -49,6 +49,7 @@ With no extra, the app plays `mixed`. The playlist in use, and whether 4K is on,
 | `images` | Every image format and size |
 | `mixed` | Video, image and web page in turn, including the 8000x6000 JPEG and the transparent PNG |
 | `portrait` | A 1080x1920 clip and image |
+| `viewport` | A page that prints the size it was laid out at, first at the player's own size, then laid out at 1920x1080 and scaled to fit |
 | `animated` | Looping GIF, the same GIF played 3 times, animated WebP and SVG, with a clip and a still between them |
 | `split_720p` | H.264, HEVC and VP9 at 720p, for two players side by side (`--ei players 2`) |
 | `soak` | A two-minute loop of every working codec, frame rate and image type, the web page, short clips back to back and three broken assets, for long runs |
@@ -94,13 +95,15 @@ The animations, `image_animated_gif` and `image_animated_webp`, are 640x360 and 
 
 `web_timer` is a local page with a running timer, a frame strip and a sweeping bar, driven by `requestAnimationFrame`.
 
-Three more local pages test page scripts and readiness (the `web_scripts` playlist):
+More local pages test page scripts and readiness (the `web_scripts` playlist) and page sizes (the `viewport` playlist):
 
 | Asset | What it tests |
 | --- | --- |
 | `web_script_check` | Its injected script marks that it ran and hides a fake red cookie banner. The page turns green and reads SCRIPT RAN FIRST when the script ran before the page's own; red NO SCRIPT, or the banner, means it didn't. |
 | `web_ready_8s` | Shows a red LOADING, then after 8 seconds a green READY and calls `gapless.ready()`. That's longer than the 6-second clip it preloads behind, so it isn't ready at its turn: with `waitForPageReady` the cut waits and the red never reaches the screen, while with `--ez scripts false` the red LOADING shows first. |
 | `web_ready_never` | Never calls `gapless.ready()`, so it is shown only when `play()` stops waiting. |
+| `web_viewport_check` | Prints the size it was laid out at, in CSS pixels, and draws a red frame at 1920x1080 with marks at 960, 1280 and 1920. At the player's own size the frame runs off the screen. |
+| `web_viewport_1920` | The same page with `width` 1920 and `height` 1080: it lays out at 1920x1080, the red frame sits on the player's edges and the 1920 mark reaches the right edge. Try it with `--es fit` and `--ei players 2`. |
 
 The other `web_*` entries are live websites, loaded over the network: news front pages with ads and consent banners (BBC, the Guardian, CNN, AccuWeather), WebGL (Windy, three.js), maps (OpenStreetMap, Google Maps), a Grafana dashboard, a live clock (time.is), GitHub, Reddit, Amazon, light pages (Wikipedia, Hacker News) and an embedded YouTube video, which needs a video decoder next to ExoPlayer's. They change without notice, so they test how the player copes, not exact output. The BBC, Guardian, CNN and AccuWeather pages have a script that hides their cookie consent banners, and Wikipedia is shown only once fully loaded (`gapless.ready()` on `load`) and scrolls slowly. On a TV with about 1 GB of RAM, heavy sites take 200 to 300 MB in the WebView renderer, run the device out of memory within half an hour, and hold video frames for about half a second around each cut while they load.
 

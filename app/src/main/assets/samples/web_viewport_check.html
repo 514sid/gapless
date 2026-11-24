@@ -1,0 +1,37 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Viewport check</title>
+<style>
+  html, body { margin: 0; background: #264653; color: #fff; font-family: sans-serif; overflow: hidden; }
+  #frame { position: absolute; left: 0; top: 0; width: 1920px; height: 1080px; box-sizing: border-box;
+           border: 12px solid #e63946; }
+  #size { position: absolute; left: 80px; top: 120px; font-size: 120px; font-weight: bold; }
+  #more { position: absolute; left: 80px; top: 290px; font-size: 48px; }
+  #full { position: absolute; left: 0; top: 520px; width: 100%; height: 80px; background: #2a9d8f;
+          font-size: 48px; line-height: 80px; padding-left: 80px; box-sizing: border-box; }
+  .mark { position: absolute; top: 640px; height: 80px; border-right: 6px solid #fff; font-size: 40px;
+          text-align: right; padding-right: 12px; box-sizing: border-box; background: rgba(255,255,255,.12); }
+</style></head>
+<body>
+<div id="frame"></div>
+<div id="size"></div>
+<div id="more"></div>
+<div id="full">100% wide: <span id="fw"></span></div>
+<div class="mark" style="width:960px">960</div>
+<div class="mark" style="width:1280px; top:740px">1280</div>
+<div class="mark" style="width:1920px; top:840px">1920</div>
+<script>
+  function show() {
+    var de = document.documentElement;
+    document.getElementById('size').textContent = de.clientWidth + ' x ' + de.clientHeight;
+    document.getElementById('fw').textContent = document.getElementById('full').offsetWidth + ' px';
+    document.getElementById('more').textContent = 'layout viewport, CSS pixels   inner ' + innerWidth + ' x ' + innerHeight + '   dpr ' +
+        devicePixelRatio.toFixed(2) + '   screen ' + screen.width + ' x ' + screen.height +
+        (window.visualViewport ? '   visual ' + visualViewport.width.toFixed(2) + ' x ' +
+        visualViewport.height.toFixed(2) + ' at ' + visualViewport.scale.toFixed(4) : '');
+  }
+  show();
+  addEventListener('resize', show);
+  if (window.visualViewport) visualViewport.addEventListener('resize', show);
+</script>
+</body></html>

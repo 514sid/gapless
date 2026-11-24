@@ -89,3 +89,41 @@ internal fun Modifier.fitted(size: ContentSize?, fit: GaplessFit): Modifier =
             layout(width, height) { placeable.place((width - w) / 2, (height - h) / 2) }
         }
     }
+
+/**
+ * Lays content of [size] out as [fit] says, like [fitted], but stretches by scaling: the content is
+ * laid out at the size [GaplessFit.Contain] gives and scaled to fill. For content that lays itself
+ * out at its given size, such as a web page, which can't be measured to a distorted shape.
+ */
+internal fun Modifier.fittedByScaling(size: ContentSize?, fit: GaplessFit): Modifier =
+    if (size == null) {
+        fillMaxSize()
+    } else {
+        layout { measurable, constraints ->
+            val stretch = fit == GaplessFit.Stretch
+            val box = if (constraints.hasBoundedWidth && constraints.hasBoundedHeight && constraints.maxHeight > 0) {
+                contentBox(constraints.maxWidth, constraints.maxHeight, size, if (stretch) GaplessFit.Contain else fit)
+            } else {
+                null
+            }
+            if (box == null) {
+                val placeable = measurable.measure(constraints)
+                return@layout layout(placeable.width, placeable.height) { placeable.place(0, 0) }
+            }
+            val width = constraints.maxWidth
+            val height = constraints.maxHeight
+            val w = box.first.coerceAtLeast(1)
+            val h = box.second.coerceAtLeast(1)
+            val placeable = measurable.measure(Constraints.fixed(w, h))
+            layout(width, height) {
+                if (stretch) {
+                    placeable.placeWithLayer((width - w) / 2, (height - h) / 2) {
+                        scaleX = width.toFloat() / w
+                        scaleY = height.toFloat() / h
+                    }
+                } else {
+                    placeable.place((width - w) / 2, (height - h) / 2)
+                }
+            }
+        }
+    }

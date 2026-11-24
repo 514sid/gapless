@@ -508,6 +508,23 @@ class GaplessControllerTest {
     }
 
     @Test
+    fun `a web page's size becomes its viewport, with its framing`() = runTest {
+        val h = Harness(this)
+        runCurrent()
+
+        h.controller.prepareNext(
+            GaplessAsset("board", "https://example.com", "text/html", width = 1920, height = 1080, fit = GaplessFit.Cover),
+        )
+        h.controller.prepareNext(GaplessAsset("site", "https://example.org", "text/html"))
+        runCurrent()
+
+        val (board, site) = h.prepares.map { it as PlaybackItem.Web }
+        assertEquals(ContentSize(1920f, 1080f), board.viewport)
+        assertEquals(Framing(GaplessFit.Cover), board.framing)
+        assertNull(site.viewport)
+    }
+
+    @Test
     fun `an animated image's loop count reaches what it plays as`() = runTest {
         val h = Harness(this)
         runCurrent()

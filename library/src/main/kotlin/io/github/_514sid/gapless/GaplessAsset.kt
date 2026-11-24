@@ -10,7 +10,10 @@ package io.github._514sid.gapless
  * such as `; charset=utf-8`. Any other type is rejected by [GaplessController].
  * @property width Width of the media in pixels, if known. For video, [width] and [height] together
  * size the video slot until the decoder reports the real frame size; leaving them null is fine.
- * Ignored for web assets.
+ * For a web page, [width] and [height] are the size in CSS pixels it is laid out at, whatever the
+ * player's size and the screen's density: a page made for 1920x1080 is given 1920 x 1080 and
+ * scaled to fit the player as [fit] says. Leave them null to lay the page out at the player's own
+ * size, as a browser would.
  * @property height Height of the media in pixels, if known. See [width].
  * @property refreshIntervalMs Reload interval in milliseconds for web assets. Null means no auto-refresh.
  * @property volume Playback volume for video assets, from 0.0 (silent) to 1.0 (full). Defaults to 0.0.
@@ -33,11 +36,11 @@ package io.github._514sid.gapless
  * has finished. The page itself or [javaScript] can make the call. A page that never calls it is
  * shown anyway when [GaplessController.play] times out waiting, as an unpainted page is. Any page
  * in the WebView can call `gapless.ready()`, but it only ever decides when to show the page.
- * @property fit Videos and images only: how one whose shape differs from the player's is fitted to
- * it: scaled to fit inside, to cover, stretched, or at its own size. Defaults to
- * [GaplessFit.Contain], which shows all of it with bars around it. Web pages lay
- * themselves out and ignore this.
- * @property backgroundColor Videos and images only: the colour of the bars around content that
+ * @property fit How content whose shape differs from the player's is fitted to it: scaled to fit
+ * inside, to cover, stretched, or at its own size. Defaults to [GaplessFit.Contain], which shows
+ * all of it with bars around it. Web pages follow it only when they have a [width] and [height];
+ * otherwise they lay themselves out at the player's size.
+ * @property backgroundColor The colour of the bars around content that
  * doesn't fill the player, as ARGB, such as `0xFF202020.toInt()` or `Color.White.toArgb()`.
  * Defaults to opaque black. A transparent colour shows black, the player's own background.
  * @property animationLoops Animated images only (GIF, and animated WebP on Android 9 and up): how

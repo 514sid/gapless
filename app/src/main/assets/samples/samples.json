@@ -389,6 +389,20 @@
       "uri": "file:///android_asset/samples/web_ready_never.html"
     },
     {
+      "id": "web_viewport_check",
+      "mimeType": "text/html",
+      "durationMs": 6000,
+      "uri": "file:///android_asset/samples/web_viewport_check.html"
+    },
+    {
+      "id": "web_viewport_1920",
+      "mimeType": "text/html",
+      "width": 1920,
+      "height": 1080,
+      "durationMs": 6000,
+      "uri": "file:///android_asset/samples/web_viewport_check.html"
+    },
+    {
       "id": "broken_truncated_mp4",
       "mimeType": "video/mp4",
       "width": 1920,
@@ -582,6 +596,12 @@
       "h264_1080x1920p30_portrait",
       "image_1080x1920_portrait_jpg"
     ],
+    "viewport": [
+      "web_viewport_check",
+      "h264_1080p30",
+      "web_viewport_1920",
+      "image_1920x1080_jpg"
+    ],
     "animated": [
       "image_animated_gif",
       "h264_1080p30",
@@ -737,7 +757,9 @@
       "web_youtube_embed",
       "web_script_check",
       "web_ready_8s",
-      "web_ready_never"
+      "web_ready_never",
+      "web_viewport_check",
+      "web_viewport_1920"
     ],
     "broken": [
       "broken_truncated_mp4",

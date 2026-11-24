@@ -334,6 +334,49 @@ SVG_IMAGE = """<svg xmlns="http://www.w3.org/2000/svg" width="1920" height="1080
 """
 
 
+# A page that shows the viewport it was laid out at. A red frame is drawn at 1920x1080 CSS pixels
+# and a ruler marks 960, 1280 and 1920: with a 1920x1080 viewport the frame lines up with the
+# player's edges.
+VIEWPORT_CHECK_PAGE = """<!doctype html>
+<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Viewport check</title>
+<style>
+  html, body { margin: 0; background: #264653; color: #fff; font-family: sans-serif; overflow: hidden; }
+  #frame { position: absolute; left: 0; top: 0; width: 1920px; height: 1080px; box-sizing: border-box;
+           border: 12px solid #e63946; }
+  #size { position: absolute; left: 80px; top: 120px; font-size: 120px; font-weight: bold; }
+  #more { position: absolute; left: 80px; top: 290px; font-size: 48px; }
+  #full { position: absolute; left: 0; top: 520px; width: 100%; height: 80px; background: #2a9d8f;
+          font-size: 48px; line-height: 80px; padding-left: 80px; box-sizing: border-box; }
+  .mark { position: absolute; top: 640px; height: 80px; border-right: 6px solid #fff; font-size: 40px;
+          text-align: right; padding-right: 12px; box-sizing: border-box; background: rgba(255,255,255,.12); }
+</style></head>
+<body>
+<div id="frame"></div>
+<div id="size"></div>
+<div id="more"></div>
+<div id="full">100% wide: <span id="fw"></span></div>
+<div class="mark" style="width:960px">960</div>
+<div class="mark" style="width:1280px; top:740px">1280</div>
+<div class="mark" style="width:1920px; top:840px">1920</div>
+<script>
+  function show() {
+    var de = document.documentElement;
+    document.getElementById('size').textContent = de.clientWidth + ' x ' + de.clientHeight;
+    document.getElementById('fw').textContent = document.getElementById('full').offsetWidth + ' px';
+    document.getElementById('more').textContent = 'layout viewport, CSS pixels   inner ' + innerWidth + ' x ' + innerHeight + '   dpr ' +
+        devicePixelRatio.toFixed(2) + '   screen ' + screen.width + ' x ' + screen.height +
+        (window.visualViewport ? '   visual ' + visualViewport.width.toFixed(2) + ' x ' +
+        visualViewport.height.toFixed(2) + ' at ' + visualViewport.scale.toFixed(4) : '');
+  }
+  show();
+  addEventListener('resize', show);
+  if (window.visualViewport) visualViewport.addEventListener('resize', show);
+</script>
+</body></html>
+"""
+
+
 # Broken assets. Each should end in an error event, and the player should carry on with the
 # next asset instead of crashing or stalling.
 
@@ -548,6 +591,8 @@ PLAYLISTS = {
     "mixed": ["h264_1080p30", "image_1920x1080_jpg", "web_timer", "hevc_1080p30",
               "image_8000x6000_huge_jpg", "vp9_1080p30", "image_1920x1080_alpha_png"],
     "portrait": ["h264_1080x1920p30_portrait", "image_1080x1920_portrait_jpg"],
+    # A page at the player's own size, then laid out at 1920x1080 and scaled to fit.
+    "viewport": ["web_viewport_check", "h264_1080p30", "web_viewport_1920", "image_1920x1080_jpg"],
     # Animations start from their first frame at each cut; the 3-loop one stops on its last frame.
     "animated": ["image_animated_gif", "h264_1080p30", "image_animated_gif_3_loops",
                  "image_animated_webp", "image_svg", "image_1920x1080_jpg"],
@@ -636,11 +681,15 @@ def main():
         ("web_script_check", SCRIPT_CHECK_PAGE, dict(javaScript=SCRIPT_CHECK_JS)),
         ("web_ready_8s", ready_page(8, True), dict(waitForPageReady=True)),
         ("web_ready_never", ready_page(0, False), dict(waitForPageReady=True)),
+        ("web_viewport_check", VIEWPORT_CHECK_PAGE, {}),
     ]:
         with open(os.path.join(args.out, name + ".html"), "w") as fh:
             fh.write(page)
         assets.append(dict(id=name, file=name + ".html", mimeType="text/html",
                            durationMs=WEB_SECONDS * 1000, **extra))
+    # The same page laid out at 1920x1080 CSS pixels and scaled to the player.
+    assets.append(dict(id="web_viewport_1920", file="web_viewport_check.html", mimeType="text/html",
+                       width=1920, height=1080, durationMs=WEB_SECONDS * 1000))
     broken = render_broken(args.out, wanted)
     broken_ids = [b["id"] for b in broken] + [v["id"] for v in VIDEOS if v.get("broken")]
     assets += broken
