@@ -31,6 +31,9 @@
         visualViewport.height.toFixed(2) + ' at ' + visualViewport.scale.toFixed(4) : '');
   }
   show();
+  // A page preloaded in a hidden slot can run before it has been laid out; read the sizes again.
+  addEventListener('load', show);
+  setInterval(show, 1000);
   addEventListener('resize', show);
   if (window.visualViewport) visualViewport.addEventListener('resize', show);
 </script>
