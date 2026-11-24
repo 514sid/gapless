@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1920" height="1080" viewBox="0 0 1920 1080">
+  <rect width="1920" height="1080" fill="#2a6f97"/>
+  <rect x="6" y="6" width="1908" height="1068" fill="none" stroke="#fff" stroke-width="12"/>
+  <circle cx="480" cy="540" r="260" fill="#f4a261"/>
+  <polygon points="1440,280 1700,800 1180,800" fill="#e9c46a"/>
+  <text x="960" y="200" font-family="sans-serif" font-size="96" fill="#fff" text-anchor="middle">Image  SVG  1920 x 1080</text>
+  <text x="960" y="980" font-family="sans-serif" font-size="140" fill="#fff" text-anchor="middle">Vector image</text>
+</svg>

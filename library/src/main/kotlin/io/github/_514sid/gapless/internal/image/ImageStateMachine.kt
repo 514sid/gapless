@@ -99,7 +99,7 @@ internal class ImageStateMachine(
 
         renderState = renderState.setSlot(
             slot = inactiveSlot,
-            value = ImageSlotState(item.model, item.playbackId, loaded = false, framing = item.framing)
+            value = ImageSlotState(item.model, item.playbackId, loaded = false, framing = item.framing, animationLoops = item.animationLoops)
         )
 
         val owner = scope.coroutineContext[ContinuationInterceptor] ?: Dispatchers.Main
@@ -173,6 +173,24 @@ internal class ImageStateMachine(
         onShown?.invoke(playbackId)
     }
 
+    /** An animated image played all its loops. */
+    var onCompleted: ((playbackId: UUID) -> Unit)? = null
+
+    /** The last image [onCompleted] was called for, so it is reported once per play. */
+    private var completedId: UUID? = null
+
+    /**
+     * [slot]'s animation stopped on its last frame after its loops. Only the image on screen counts:
+     * a staged one is held on its first frame and starts over when cut to.
+     */
+    fun onAnimationEnd(slot: ImageSlotState) {
+        val playbackId = slot.playbackId ?: return
+        val active = if (renderState.activeSlot == 0) renderState.slotA else renderState.slotB
+        if (active?.playbackId != playbackId || playbackId == completedId) return
+        completedId = playbackId
+        onCompleted?.invoke(playbackId)
+    }
+
     fun onDisplayError(slot: ImageSlotState, message: String) {
         // A slot still waiting for its preload has no image yet, and Coil reports that empty
         // request as an error. Nothing was decoded, so nothing failed.
@@ -205,7 +223,7 @@ internal class ImageStateMachine(
         if (staged?.playbackId != item.playbackId) {
             renderState = renderState.setSlot(
                 slot = target,
-                value = ImageSlotState(item.model, item.playbackId, framing = item.framing)
+                value = ImageSlotState(item.model, item.playbackId, framing = item.framing, animationLoops = item.animationLoops)
             )
         } else if (!staged.loaded) {
             // Cut before the preload finished: the slot loads it itself now.
@@ -220,6 +238,7 @@ internal class ImageStateMachine(
 
     fun clear() {
         awaitingShown = null
+        completedId = null
         decoded.fill(null)
         prepareJob?.cancel()
         prepareJob = null

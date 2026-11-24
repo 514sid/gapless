@@ -475,4 +475,38 @@ class ImageStateMachineTest {
         }
         assertEquals(GaplessFit.entries, decoded)
     }
+
+    // Animations
+
+    @Test
+    fun `an animation that ran its loops on screen is reported once`() {
+        val completed = mutableListOf<java.util.UUID>()
+        machine.onCompleted = { completed += it }
+        val gif = PlaybackItem.Image("a.gif", 480, 270, animationLoops = 2)
+        machine.prepare(gif)
+        val staged = machine.renderState.slotB!!
+        assertEquals(2, staged.animationLoops)
+
+        machine.onAnimationEnd(staged)
+        assertTrue(completed.isEmpty(), "a staged animation isn't on screen yet")
+
+        machine.play(gif)
+        val shown = machine.renderState.slotB!!
+        machine.onAnimationEnd(shown)
+        machine.onAnimationEnd(shown)
+        assertEquals(listOf(gif.playbackId), completed)
+    }
+
+    @Test
+    fun `an animation cut away from doesn't report`() {
+        val completed = mutableListOf<java.util.UUID>()
+        machine.onCompleted = { completed += it }
+        val gif = PlaybackItem.Image("a.gif", 480, 270, animationLoops = 1)
+        machine.play(gif)
+        val old = machine.renderState.slotB!!
+        machine.play(imageItem("next.jpg"))
+
+        machine.onAnimationEnd(old)
+        assertTrue(completed.isEmpty())
+    }
 }

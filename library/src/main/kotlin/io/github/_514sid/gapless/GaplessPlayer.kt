@@ -78,8 +78,10 @@ public fun GaplessPlayer(
                     modifier = Modifier
                         .fillMaxSize()
                         .graphicsLayer { alpha = if (active == ActiveContent.IMAGE) 1f else 0f },
+                    visible = active == ActiveContent.IMAGE,
                     onDisplayError = orchestrator.image::onDisplayError,
                     onDisplayed = orchestrator.image::onDisplayed,
+                    onAnimationEnd = orchestrator.image::onAnimationEnd,
                 )
 
                 WebPlayer(

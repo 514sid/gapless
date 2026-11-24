@@ -89,6 +89,7 @@ internal class PlayerOrchestrator(
         image.onPlaybackError = { message -> onError?.invoke(message) }
         video.onStartedCallback = { playbackId, startedAt -> onShown?.invoke(playbackId, startedAt) }
         video.onCompletedCallback = { playbackId -> onCompleted?.invoke(playbackId) }
+        image.onCompleted = { playbackId -> onCompleted?.invoke(playbackId) }
         image.onShown = { playbackId -> onShown?.invoke(playbackId, null) }
         web.onShown = { playbackId -> onShown?.invoke(playbackId, null) }
 
