@@ -166,7 +166,7 @@ internal class WebStateMachine(
             loadedUrls[slot] = item.url
             setSlotItem(slot, item)
         }
-        post { loadUrl(item.url) }
+        post { if (item.requestHeaders.isEmpty()) loadUrl(item.url) else loadUrl(item.url, item.requestHeaders) }
     }
 
     /**
@@ -498,10 +498,11 @@ internal class WebStateMachine(
         logDebug("createWebView(): Instantiating slot $slot")
         setBackgroundColor(android.graphics.Color.BLACK)
 
-        webViewClient = object : WebViewClient() {
+        // Passes what it doesn't need, and what it only watches, on to the app's own client.
+        val client = object : ForwardingWebViewClient() {
             override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
                 logDebug("${view.slotName()} redirecting to: ${request.url}")
-                return false
+                return super.shouldOverrideUrlLoading(view, request)
             }
 
             override fun onPageCommitVisible(view: WebView, url: String) {
@@ -525,6 +526,7 @@ internal class WebStateMachine(
             }
 
             override fun onReceivedError(view: WebView, request: WebResourceRequest, error: WebResourceError) {
+                super.onReceivedError(view, request, error)
                 if (request.isForMainFrame) {
                     val message = "Web Error on ${view.slotName()}: ${error.description}"
                     Log.e(TAG, message)
@@ -533,6 +535,7 @@ internal class WebStateMachine(
             }
 
             override fun onReceivedHttpError(view: WebView, request: WebResourceRequest, errorResponse: WebResourceResponse) {
+                super.onReceivedHttpError(view, request, errorResponse)
                 if (request.isForMainFrame) {
                     val message = "HTTP Error on ${view.slotName()}: ${errorResponse.statusCode}"
                     Log.e(TAG, message)
@@ -545,11 +548,13 @@ internal class WebStateMachine(
                 return true
             }
         }
+        webViewClient = client
 
         webChromeClient = WebChromeClient()
 
         // gapless.ready(), for pages shown only once they say so (waitForPageReady).
-        addJavascriptInterface(PageBridge(this), "gapless")
+        val bridge = PageBridge(this)
+        addJavascriptInterface(bridge, "gapless")
 
         CookieManager.getInstance().setAcceptThirdPartyCookies(this, config.allowThirdPartyCookies)
 
@@ -564,6 +569,27 @@ internal class WebStateMachine(
             minimumFontSize = 1
             minimumLogicalFontSize = 1
             if (config.userAgent != null) userAgentString = config.userAgent
+        }
+
+        config.configureWebView?.let { configure ->
+            try {
+                configure(this)
+            } catch (e: Exception) {
+                Log.e(TAG, "configureWebView failed; using the WebView as the library set it up", e)
+            }
+            // Paint detection, page scripts, the viewport, readiness and hang recovery all run
+            // through these, so the app's function can't take them away. A client of the app's own
+            // goes behind the library's, which passes its callbacks on.
+            val appClient = webViewClient
+            if (appClient !== client) {
+                client.target = appClient
+                webViewClient = client
+            }
+            if (!settings.javaScriptEnabled) {
+                Log.w(TAG, "configureWebView turned JavaScript off; the library needs it and turned it back on")
+                settings.javaScriptEnabled = true
+            }
+            addJavascriptInterface(bridge, "gapless")
         }
 
         loadBlank()

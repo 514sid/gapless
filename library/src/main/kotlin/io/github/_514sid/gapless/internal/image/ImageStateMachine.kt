@@ -9,6 +9,7 @@ import coil3.imageLoader
 import coil3.request.ErrorResult
 import coil3.request.ImageRequest
 import coil3.request.allowHardware
+import coil3.network.httpHeaders
 import coil3.size.Precision
 import coil3.size.Scale
 import coil3.size.Size
@@ -31,14 +32,16 @@ import java.util.UUID
 internal class ImageStateMachine(
     private val context: Context,
     private val scope: CoroutineScope,
-    private val loadImage: suspend (model: Any, width: Int, height: Int, fit: GaplessFit) -> Unit = { model, w, h, fit ->
+    private val loadImage: suspend (item: PlaybackItem.Image, width: Int, height: Int) -> Unit = { item, w, h ->
+        val fit = item.framing.fit
         val result = context.imageLoader.execute(
             ImageRequest.Builder(context)
-                .data(model)
+                .data(item.model)
                 // Same as AsyncImage with the slot's ContentScale, so its request is a cache hit:
                 // None decodes the whole image, Crop and FillBounds to fill the size, Fit to fit inside it.
                 .apply { if (fit == GaplessFit.Original) size(Size.ORIGINAL) else size(w, h) }
                 .scale(if (fit == GaplessFit.Contain) Scale.FIT else Scale.FILL)
+                .httpHeaders(networkHeadersOf(item.requestHeaders))
                 .precision(Precision.INEXACT)
                 .allowHardware(true)
                 .build()
@@ -99,7 +102,7 @@ internal class ImageStateMachine(
 
         renderState = renderState.setSlot(
             slot = inactiveSlot,
-            value = ImageSlotState(item.model, item.playbackId, loaded = false, framing = item.framing, animationLoops = item.animationLoops)
+            value = ImageSlotState(item.model, item.playbackId, loaded = false, framing = item.framing, animationLoops = item.animationLoops, requestHeaders = item.requestHeaders)
         )
 
         val owner = scope.coroutineContext[ContinuationInterceptor] ?: Dispatchers.Main
@@ -111,7 +114,7 @@ internal class ImageStateMachine(
                     containerSize.first { (w, h) -> w > 0 && h > 0 }
                 } ?: containerSize.value
                 val (targetW, targetH) = targetSize(width, height)
-                loadImage(item.model, targetW, targetH, item.framing.fit)
+                loadImage(item, targetW, targetH)
                 // Decoded and cached: now let the slot show it.
                 withContext(owner) { markLoaded(item) }
             } catch (e: CancellationException) {
@@ -223,7 +226,7 @@ internal class ImageStateMachine(
         if (staged?.playbackId != item.playbackId) {
             renderState = renderState.setSlot(
                 slot = target,
-                value = ImageSlotState(item.model, item.playbackId, framing = item.framing, animationLoops = item.animationLoops)
+                value = ImageSlotState(item.model, item.playbackId, framing = item.framing, animationLoops = item.animationLoops, requestHeaders = item.requestHeaders)
             )
         } else if (!staged.loaded) {
             // Cut before the preload finished: the slot loads it itself now.

@@ -525,6 +525,23 @@ class GaplessControllerTest {
     }
 
     @Test
+    fun `each asset's request headers reach what it plays as`() = runTest {
+        val h = Harness(this)
+        runCurrent()
+        val headers = mapOf("Authorization" to "Bearer abc")
+
+        h.controller.prepareNext(video("v").copy(requestHeaders = headers))
+        h.controller.prepareNext(GaplessAsset("i", "https://example.com/a.jpg", "image/jpeg", requestHeaders = headers))
+        h.controller.prepareNext(GaplessAsset("w", "https://example.com", "text/html", requestHeaders = headers))
+        runCurrent()
+
+        val (v, i, w) = h.prepares
+        assertEquals(headers, (v as PlaybackItem.Video).requestHeaders)
+        assertEquals(headers, (i as PlaybackItem.Image).requestHeaders)
+        assertEquals(headers, (w as PlaybackItem.Web).requestHeaders)
+    }
+
+    @Test
     fun `an animated image's loop count reaches what it plays as`() = runTest {
         val h = Harness(this)
         runCurrent()
@@ -554,6 +571,12 @@ class GaplessControllerTest {
         }
         assertThrows<IllegalArgumentException> {
             controller.play(GaplessAsset("g", "a.gif", "image/gif", animationLoops = 0))
+        }
+        assertThrows<IllegalArgumentException> {
+            controller.play(video("a").copy(requestHeaders = mapOf("Bad Name" to "x")))
+        }
+        assertThrows<IllegalArgumentException> {
+            controller.play(video("a").copy(requestHeaders = mapOf("X-Token" to "a\r\nX-Evil: 1")))
         }
     }
 }

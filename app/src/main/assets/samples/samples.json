@@ -244,6 +244,14 @@
       "uri": "file:///android_asset/samples/image_svg.svg"
     },
     {
+      "id": "hls_h264_1080p30",
+      "mimeType": "application/x-mpegurl",
+      "width": 1920,
+      "height": 1080,
+      "durationMs": 6000,
+      "uri": "file:///android_asset/samples/hls_h264_1080p30/index.m3u8"
+    },
+    {
       "id": "web_timer",
       "mimeType": "text/html",
       "durationMs": 6000,
@@ -596,6 +604,12 @@
       "h264_1080x1920p30_portrait",
       "image_1080x1920_portrait_jpg"
     ],
+    "network": [
+      "hls_h264_1080p30",
+      "image_1920x1080_jpg",
+      "web_timer",
+      "h264_1080p30"
+    ],
     "viewport": [
       "web_viewport_check",
       "h264_1080p30",
@@ -738,6 +752,7 @@
       "image_animated_webp",
       "image_animated_gif_3_loops",
       "image_svg",
+      "hls_h264_1080p30",
       "web_timer",
       "web_wikipedia",
       "web_hacker_news",

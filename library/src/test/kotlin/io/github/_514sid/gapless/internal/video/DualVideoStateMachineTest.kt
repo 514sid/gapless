@@ -52,8 +52,8 @@ class DualVideoStateMachineTest {
     private lateinit var engine: DualVideoStateMachine
 
     private fun start(config: GaplessVideoConfig = GaplessVideoConfig()) {
-        engine = DualVideoStateMachine(ApplicationProvider.getApplicationContext(), config) { _, _ ->
-            FakePlayer().also { fakes += it }.mock
+        engine = DualVideoStateMachine(ApplicationProvider.getApplicationContext(), config) { _, _, headers ->
+            FakePlayer().also { it.requestHeaders = headers; fakes += it }.mock
         }
         engine.onErrorCallback = { errors += it }
         engine.onPreloadErrorCallback = { assetId, _ -> preloadErrors += assetId }
@@ -318,6 +318,26 @@ class DualVideoStateMachineTest {
         playerOf(d).listener.onVideoSizeChanged(VideoSize(1000, 500))
         val size = if (slot == 0) engine.renderState.sizeA else engine.renderState.sizeB
         assertEquals(ContentSize(1000f, 500f), size)
+    }
+
+    // --- Request headers ---
+
+    @Test
+    fun `a player's requests carry the headers of the clip in its slot, until it is cleared`() {
+        start()
+        val headers = mapOf("Authorization" to "Bearer abc")
+        val a = PlaybackItem.Video("https://example.com/a.m3u8", "application/x-mpegurl", requestHeaders = headers)
+            .apply { assetId = "a" }
+        playFirst(a)
+        val pa = playerOf(a)
+        assertEquals(headers, pa.requestHeaders())
+
+        val b = video("b")
+        engine.prepare(b)
+        playerOf(b).firstFrame()
+        engine.play(b)
+        assertEquals("the slot a left is cleared", emptyMap<String, String>(), pa.requestHeaders())
+        assertEquals(emptyMap<String, String>(), playerOf(b).requestHeaders())
     }
 
     // --- Framing ---
@@ -739,6 +759,7 @@ class DualVideoStateMachineTest {
     /** A stand-in ExoPlayer that records what the engine does to it. */
     private class FakePlayer {
         val mock: ExoPlayer = mockk(relaxed = true)
+        var requestHeaders: () -> Map<String, String> = { emptyMap() }
         lateinit var listener: Player.Listener
         var frameListener: VideoFrameMetadataListener? = null
         var prepares = 0
