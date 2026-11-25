@@ -45,6 +45,29 @@ class SampleManifest(
         playlists,
     )
 
+    /**
+     * The same media fetched from [server], an HTTP server serving the samples folder, instead of
+     * from the APK, with [header] (`Name: value`) sent with every request. For testing networked
+     * playback and request headers. Websites keep their own addresses.
+     */
+    fun served(server: String?, header: String?): SampleManifest {
+        if (server == null && header == null) return this
+        val base = server?.let { if (it.endsWith("/")) it else "$it/" }
+        val extra = header?.let {
+            val name = it.substringBefore(':').trim()
+            require(name.isNotEmpty() && ':' in it) { "Header \"$it\" isn't Name: value" }
+            mapOf(name to it.substringAfter(':').trim())
+        }.orEmpty()
+        return SampleManifest(
+            assets.mapValues { (_, a) ->
+                val uri = if (base != null && a.uri.startsWith(ASSET_PREFIX)) base + a.uri.removePrefix(ASSET_PREFIX) else a.uri
+                a.copy(uri = uri, requestHeaders = a.requestHeaders + extra)
+            },
+            broken,
+            playlists,
+        )
+    }
+
     private fun GaplessAsset.isUhdVideo(): Boolean {
         if (!mimeType.startsWith("video/")) return false
         val w = width ?: return false
@@ -54,6 +77,7 @@ class SampleManifest(
 
     companion object {
         const val PATH = "samples/samples.json"
+        private const val ASSET_PREFIX = "file:///android_asset/samples/"
 
         /** `contain`, `cover`, `stretch` or `original`, in any case. */
         fun parseFit(name: String): GaplessFit =

@@ -129,7 +129,7 @@ public class GaplessController(
      * Begins playback with [asset]: buffers it for [preloadMs], then shows it.
      *
      * @throws IllegalArgumentException if [asset] fails validation (blank id or uri, unsupported
-     * mimeType, volume outside 0..1, non-positive durationMs, refreshIntervalMs or animationLoops).
+     * mimeType, volume outside 0..1, non-positive durationMs, refreshIntervalMs or animationLoops, malformed requestHeaders).
      */
     public fun start(asset: GaplessAsset) {
         validateAsset(asset)
@@ -140,7 +140,7 @@ public class GaplessController(
      * Starts buffering [asset] so a later [play] of it can cut immediately.
      *
      * @throws IllegalArgumentException if [asset] fails validation (blank id or uri, unsupported
-     * mimeType, volume outside 0..1, non-positive durationMs, refreshIntervalMs or animationLoops).
+     * mimeType, volume outside 0..1, non-positive durationMs, refreshIntervalMs or animationLoops, malformed requestHeaders).
      */
     public fun prepareNext(asset: GaplessAsset) {
         validateAsset(asset)
@@ -156,7 +156,7 @@ public class GaplessController(
      * on screen, or in [GaplessEvent.PlaybackError] if it fails after the cut but before it shows.
      *
      * @throws IllegalArgumentException if [asset] fails validation (blank id or uri, unsupported
-     * mimeType, volume outside 0..1, non-positive durationMs, refreshIntervalMs or animationLoops).
+     * mimeType, volume outside 0..1, non-positive durationMs, refreshIntervalMs or animationLoops, malformed requestHeaders).
      */
     public fun play(asset: GaplessAsset) {
         validateAsset(asset)
@@ -176,7 +176,7 @@ public class GaplessController(
      * isn't sped up again. This is how devices sharing a clock stay in step. Ignored for images and
      * web pages, which have no timeline of their own: call [play] at the moment they should appear.
      * @throws IllegalArgumentException if [asset] fails validation (blank id or uri, unsupported
-     * mimeType, volume outside 0..1, non-positive durationMs, refreshIntervalMs or animationLoops).
+     * mimeType, volume outside 0..1, non-positive durationMs, refreshIntervalMs or animationLoops, malformed requestHeaders).
      */
     @ExperimentalGaplessApi
     public fun play(asset: GaplessAsset, startAtMs: Long) {
@@ -441,6 +441,15 @@ public class GaplessController(
         asset.durationMs?.let { require(it > 0) { "Asset \"${asset.id}\" durationMs must be positive" } }
         asset.refreshIntervalMs?.let { require(it > 0) { "Asset \"${asset.id}\" refreshIntervalMs must be positive" } }
         asset.animationLoops?.let { require(it > 0) { "Asset \"${asset.id}\" animationLoops must be positive" } }
+        for ((name, value) in asset.requestHeaders) {
+            // A line break would let a value add headers or a body of its own to the request.
+            require(name.isNotBlank() && name.none { it.isWhitespace() || it == ':' }) {
+                "Asset \"${asset.id}\" has an invalid request header name \"$name\""
+            }
+            require(value.none { it == '\r' || it == '\n' }) {
+                "Asset \"${asset.id}\" request header \"$name\" has a line break in its value"
+            }
+        }
         asset.javaScriptOrigins?.let { origins ->
             require(origins.isNotEmpty() && origins.none { it.isBlank() }) {
                 "Asset \"${asset.id}\" javaScriptOrigins must name at least one origin, or be null"
@@ -457,6 +466,7 @@ public class GaplessController(
                 volume = g.volume,
                 durationMs = g.durationMs,
                 framing = Framing(g.fit, g.backgroundColor),
+                requestHeaders = g.requestHeaders,
             )
             g.isImage -> PlaybackItem.Image(
                 model = g.uri,
@@ -464,6 +474,7 @@ public class GaplessController(
                 height = g.height ?: 1080,
                 framing = Framing(g.fit, g.backgroundColor),
                 animationLoops = g.animationLoops,
+                requestHeaders = g.requestHeaders,
             )
             else -> PlaybackItem.Web(
                 url = g.uri,
@@ -473,6 +484,7 @@ public class GaplessController(
                 waitForReady = g.waitForPageReady,
                 viewport = ContentSize.of(g.width, g.height),
                 framing = Framing(g.fit, g.backgroundColor),
+                requestHeaders = g.requestHeaders,
             )
         }
         item.assetId = g.id

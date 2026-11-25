@@ -64,6 +64,8 @@ class PlayerActivity : ComponentActivity() {
         const val EXTRA_SCRIPTS = "scripts"
         const val EXTRA_FIT = "fit"
         const val EXTRA_BACKGROUND = "background"
+        const val EXTRA_SERVER = "server"
+        const val EXTRA_HEADER = "header"
         private const val DEFAULT_PLAYLIST = "mixed"
     }
 
@@ -88,12 +90,14 @@ class PlayerActivity : ComponentActivity() {
         // adb shell am start -S -n io.github.gapless.sample/.MainActivity --es playlist codecs
         // --ez scripts false drops the page scripts and readiness waits, to compare without them.
         // --es fit cover and --es background 202020 frame every video and image that way.
+        // --es server http://host:8000/ fetches the samples from an HTTP server serving the samples
+        // folder, and --es header "Authorization: Bearer x" sends that header with every request.
         val manifest = SampleManifest.load(this).let {
             if (intent.getBooleanExtra(EXTRA_SCRIPTS, true)) it else it.withoutScripts()
         }.framed(
             fit = intent.getStringExtra(EXTRA_FIT)?.let(SampleManifest::parseFit),
             backgroundColor = intent.getStringExtra(EXTRA_BACKGROUND)?.let(SampleManifest::parseColor),
-        )
+        ).served(intent.getStringExtra(EXTRA_SERVER), intent.getStringExtra(EXTRA_HEADER))
         val playlistName = intent.getStringExtra(EXTRA_PLAYLIST) ?: DEFAULT_PLAYLIST
         val volume = intent.getFloatExtra(EXTRA_VOLUME, 1f)
         val showClock = intent.getBooleanExtra(EXTRA_CLOCK, false)

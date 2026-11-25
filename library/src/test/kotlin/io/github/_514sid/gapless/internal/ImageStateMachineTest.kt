@@ -26,7 +26,7 @@ class ImageStateMachineTest {
         machine = ImageStateMachine(
             context = mockk<Context>(relaxed = true),
             scope = TestScope(),
-            loadImage = { _, _, _, _ -> }
+            loadImage = { _, _, _ -> }
         )
     }
 
@@ -175,7 +175,7 @@ class ImageStateMachineTest {
         machine = ImageStateMachine(
             context = mockk(relaxed = true),
             scope = this,
-            loadImage = { _, w, h, _ ->
+            loadImage = { _, w, h ->
                 widthDeferred.complete(w)
                 heightDeferred.complete(h)
             }
@@ -197,7 +197,7 @@ class ImageStateMachineTest {
         machine = ImageStateMachine(
             context = mockk(relaxed = true),
             scope = this,
-            loadImage = { _, w, h, _ ->
+            loadImage = { _, w, h ->
                 widthDeferred.complete(w)
                 heightDeferred.complete(h)
             }
@@ -219,7 +219,7 @@ class ImageStateMachineTest {
         machine = ImageStateMachine(
             context = mockk(relaxed = true),
             scope = this,
-            loadImage = { _, w, h, _ ->
+            loadImage = { _, w, h ->
                 widthDeferred.complete(w)
                 heightDeferred.complete(h)
             }
@@ -241,7 +241,7 @@ class ImageStateMachineTest {
         machine = ImageStateMachine(
             context = mockk(relaxed = true),
             scope = this,
-            loadImage = { _, w, h, _ ->
+            loadImage = { _, w, h ->
                 widthDeferred.complete(w)
                 heightDeferred.complete(h)
             }
@@ -263,7 +263,7 @@ class ImageStateMachineTest {
         machine = ImageStateMachine(
             context = mockk(relaxed = true),
             scope = this,
-            loadImage = { _, _, _, _ ->
+            loadImage = { _, _, _ ->
                 try {
                     startedDeferred.complete(Unit)
                     awaitCancellation()
@@ -290,7 +290,7 @@ class ImageStateMachineTest {
         machine = ImageStateMachine(
             context = mockk(relaxed = true),
             scope = this,
-            loadImage = { _, _, _, _ ->
+            loadImage = { _, _, _ ->
                 try {
                     startedDeferred.complete(Unit)
                     awaitCancellation()
@@ -317,7 +317,7 @@ class ImageStateMachineTest {
         machine = ImageStateMachine(
             context = mockk(relaxed = true),
             scope = this,
-            loadImage = { _, _, _, _ -> release.await() },
+            loadImage = { _, _, _ -> release.await() },
         )
         machine.updateContainerSize(1920, 1080)
         machine.prepare(imageItem("photo.jpg"))
@@ -350,7 +350,7 @@ class ImageStateMachineTest {
         machine = ImageStateMachine(
             context = mockk(relaxed = true),
             scope = this,
-            loadImage = { _, w, h, _ -> size.complete(w to h) },
+            loadImage = { _, w, h -> size.complete(w to h) },
         )
         machine.prepare(imageItem("photo.jpg"))
         machine.updateContainerSize(1080, 1920)
@@ -466,7 +466,7 @@ class ImageStateMachineTest {
         machine = ImageStateMachine(
             context = mockk(relaxed = true),
             scope = this,
-            loadImage = { _, _, _, fit -> fits.send(fit) },
+            loadImage = { item, _, _ -> fits.send(item.framing.fit) },
         )
         machine.updateContainerSize(1920, 1080)
         val decoded = GaplessFit.entries.map { fit ->
@@ -508,5 +508,21 @@ class ImageStateMachineTest {
 
         machine.onAnimationEnd(old)
         assertTrue(completed.isEmpty())
+    }
+
+    @Test
+    fun `slots and the preload carry the image's request headers`() = runTest {
+        val headers = mapOf("Authorization" to "Bearer abc")
+        val loaded = CompletableDeferred<Map<String, String>>()
+        machine = ImageStateMachine(
+            context = mockk(relaxed = true),
+            scope = this,
+            loadImage = { item, _, _ -> loaded.complete(item.requestHeaders) },
+        )
+        machine.updateContainerSize(1920, 1080)
+        val item = PlaybackItem.Image("https://example.com/a.jpg", 1920, 1080, requestHeaders = headers)
+        machine.prepare(item)
+        assertEquals(headers, loaded.await())
+        assertEquals(headers, machine.renderState.slotB?.requestHeaders)
     }
 }

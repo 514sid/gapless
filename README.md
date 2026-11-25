@@ -149,11 +149,34 @@ GaplessPlayer(
         allowThirdPartyCookies = true,
         mixedContentMode       = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW,
         userAgent              = null,         // null uses the WebView system default
+        configureWebView       = { view -> view.settings.allowFileAccess = true },
     ),
 )
 ```
 
 When the asset list is empty, the player renders nothing (transparent/black).
+
+**`configureWebView`** is for WebView settings the config doesn't cover: file access, cookies, a
+`WebChromeClient` for console messages or permission prompts, or a JavaScript interface of your own. It runs
+for each WebView once the library has set it up and before it loads anything, and again for the fresh WebView
+that replaces one whose renderer crashed. If the function throws, the error is logged and the WebView is used
+as the library set it up.
+
+A `WebViewClient` of your own works too, for example to serve pages offline from `shouldInterceptRequest` or to
+answer basic auth in `onReceivedHttpAuthRequest`. The library keeps its own client on the WebView and passes
+every callback on to yours, including the paint, error and navigation callbacks it also watches.
+`onRenderProcessGone` is the one it keeps: the library replaces the crashed WebView itself. It also needs
+JavaScript and the `gapless` JavaScript interface, so it turns those back on if the function removes them and
+logs a warning.
+
+The player is rebuilt whenever a config changes, and a function is only equal to itself, so create the config
+once rather than on every recomposition:
+
+```kotlin
+val webConfig = remember {
+    GaplessWebConfig(configureWebView = { view -> view.addJavascriptInterface(MyBridge(), "app") })
+}
+```
 
 ---
 
@@ -174,6 +197,9 @@ GaplessAsset(
 
     // Animated images only
     animationLoops = 3,      // optional; play 3 times, hold the last frame, emit Completed
+
+    // Any asset
+    requestHeaders = mapOf("Authorization" to "Bearer ..."), // sent with the asset's requests
 
     // Video only
     durationMs = 10_000,     // optional; clip the video so the next one can preload early
@@ -228,6 +254,17 @@ it comes on screen, even if its preload decoded it long before. By default it lo
 With `animationLoops` it plays that many times, stops on its last frame and emits `Completed`, as a video does
 at its end, so the host can move on right away. SVG is drawn at the size the image is shown at, so it stays
 sharp at any size.
+
+**`requestHeaders`.** For media behind authentication, set the headers its server expects, such as
+`Authorization` or a cookie. A video sends them with every request it makes: the file, or a stream's manifest,
+segments and keys, which an app couldn't add itself. An image sends them with its download. A web page sends
+them only with the request for the page itself, and again on each refresh; the scripts, images and frames it
+loads use the page's cookies instead. RTSP streams and local files ignore them. Header names can't be blank or
+contain spaces or colons, and values can't contain line breaks. A token in the URL's query string needs nothing
+extra: put it in `uri`.
+
+For offline playback, download the files yourself and pass their local paths as `uri`; that also lets the app
+decide what to keep and when to delete it.
 
 **MIME type to renderer mapping:**
 

@@ -594,6 +594,9 @@ PLAYLISTS = {
     "mixed": ["h264_1080p30", "image_1920x1080_jpg", "web_timer", "hevc_1080p30",
               "image_8000x6000_huge_jpg", "vp9_1080p30", "image_1920x1080_alpha_png"],
     "portrait": ["h264_1080x1920p30_portrait", "image_1080x1920_portrait_jpg"],
+    # One of each kind of request: an HLS stream, an image, a page and an MP4. Serve the samples
+    # folder over HTTP and pass --es server and --es header to watch the requests arrive.
+    "network": ["hls_h264_1080p30", "image_1920x1080_jpg", "web_timer", "h264_1080p30"],
     # A page at the player's own size, then laid out at 1920x1080 and scaled to fit.
     "viewport": ["web_viewport_check", "h264_1080p30", "web_viewport_1920", "image_1920x1080_jpg"],
     # Animations start from their first frame at each cut; the 3-loop one stops on its last frame.
@@ -665,6 +668,20 @@ def main():
         fh.write(SVG_IMAGE)
     assets.append(dict(id="image_svg", file="image_svg.svg", mimeType="image/svg+xml",
                        width=1920, height=1080, durationMs=IMAGE_SECONDS * 1000))
+    # An HLS stream of h264_1080p30, remuxed into 2-second segments without re-encoding.
+    hls_dir = os.path.join(args.out, "hls_h264_1080p30")
+    if wanted("hls_h264_1080p30"):
+        print("stream hls_h264_1080p30", flush=True)
+        os.makedirs(hls_dir, exist_ok=True)
+        for old in os.listdir(hls_dir):
+            os.remove(os.path.join(hls_dir, old))
+        subprocess.run(["ffmpeg", "-loglevel", "error", "-y", "-i", os.path.join(args.out, "h264_1080p30.mp4"),
+                        "-c", "copy", "-f", "hls", "-hls_time", "2", "-hls_playlist_type", "vod",
+                        "-hls_segment_filename", os.path.join(hls_dir, "seg%02d.ts"),
+                        os.path.join(hls_dir, "index.m3u8")], check=True)
+    assets.append(dict(id="hls_h264_1080p30", file="hls_h264_1080p30/index.m3u8",
+                       mimeType="application/x-mpegurl", width=1920, height=1080,
+                       durationMs=DEFAULT_SECONDS * 1000))
     # The web page is hand-written.
     shutil.copy(os.path.join(ROOT, "samples", "web_timer.html"), args.out)
     assets.append(dict(id="web_timer", file="web_timer.html", mimeType="text/html",

@@ -48,6 +48,12 @@ package io.github._514sid.gapless
  * [GaplessController.play]. With a count it plays that many times from its first frame, stops on
  * its last, and [GaplessEvent.Completed] is emitted, as for a video that reaches its end. Ignored
  * for still images, videos and web pages.
+ * @property requestHeaders HTTP headers sent with the asset's requests, such as
+ * `Authorization` or a cookie. A video sends them with every request: the file, or a stream's
+ * manifest, segments and keys. An image sends them with its download. A web page sends them only
+ * with the request for the page itself, and again on each refresh, not with the scripts, images
+ * or frames it loads; those use the page's cookies. RTSP streams and local files ignore them.
+ * Names can't be blank or contain spaces or colons, and values can't contain line breaks.
  */
 public data class GaplessAsset(
     val id: String,
@@ -64,6 +70,7 @@ public data class GaplessAsset(
     val fit: GaplessFit = GaplessFit.Contain,
     val backgroundColor: Int = 0xFF000000.toInt(),
     val animationLoops: Int? = null,
+    val requestHeaders: Map<String, String> = emptyMap(),
 ) {
     private companion object {
         const val MIME_PREFIX_VIDEO = "video/"

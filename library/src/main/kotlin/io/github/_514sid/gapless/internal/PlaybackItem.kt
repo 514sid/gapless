@@ -19,6 +19,8 @@ internal sealed class PlaybackItem {
         val volume: Float = 0f,
         val durationMs: Long? = null,
         val framing: Framing = Framing(),
+        /** Sent with every request for the clip: the file, or a stream's manifest and segments. */
+        val requestHeaders: Map<String, String> = emptyMap(),
     ) : PlaybackItem() {
         /** Set at play time when the host gave a start time; null plays unanchored. */
         @Volatile var timeline: VideoTimeline? = null
@@ -31,6 +33,7 @@ internal sealed class PlaybackItem {
         val framing: Framing = Framing(),
         /** How many times an animated image plays; null loops it until it is cut away from. */
         val animationLoops: Int? = null,
+        val requestHeaders: Map<String, String> = emptyMap(),
     ) : PlaybackItem()
 
     /**
@@ -48,5 +51,7 @@ internal sealed class PlaybackItem {
         /** The size in CSS pixels to lay the page out at, scaled to the player; null fills it. */
         val viewport: ContentSize? = null,
         val framing: Framing = Framing(),
+        /** Sent with the request for the page itself, not the resources it loads. */
+        val requestHeaders: Map<String, String> = emptyMap(),
     ) : PlaybackItem()
 }

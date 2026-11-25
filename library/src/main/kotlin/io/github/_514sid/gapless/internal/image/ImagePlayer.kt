@@ -22,6 +22,8 @@ import coil3.compose.LocalPlatformContext
 import coil3.gif.MovieDrawable
 import coil3.gif.onAnimationEnd
 import coil3.gif.repeatCount
+import coil3.network.NetworkHeaders
+import coil3.network.httpHeaders
 import coil3.request.ImageRequest
 import io.github._514sid.gapless.internal.Framing
 import java.util.UUID
@@ -36,6 +38,7 @@ internal data class ImageSlotState(
     val loaded: Boolean = true,
     val framing: Framing = Framing(),
     val animationLoops: Int? = null,
+    val requestHeaders: Map<String, String> = emptyMap(),
 )
 
 internal data class ImagePlayerState(
@@ -103,6 +106,7 @@ private fun ImageSlot(
             ImageRequest.Builder(context)
                 .data(s.model)
                 .repeatCount(s.animationLoops?.let { it - 1 } ?: MovieDrawable.REPEAT_INFINITE)
+                .httpHeaders(networkHeadersOf(s.requestHeaders))
                 .onAnimationEnd {
                     // Stopping an animation reports an end too. Only one that ran out on screen counts.
                     if (active && animation.drawable?.isRunning == false) animationEnded(s)
@@ -146,3 +150,7 @@ private fun ImageSlot(
         )
     }
 }
+
+/** [headers] as Coil's request headers. */
+internal fun networkHeadersOf(headers: Map<String, String>): NetworkHeaders =
+    NetworkHeaders.Builder().apply { headers.forEach { (name, value) -> set(name, value) } }.build()

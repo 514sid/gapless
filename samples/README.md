@@ -35,6 +35,7 @@ adb shell am start -S -n io.github.gapless.sample/.MainActivity --es playlist co
 - `--ei players 2` shows two players side by side, each with its own controller and schedule. The right one plays the same list shifted by one clip and is muted; `--es playlist2 <name>` or `--es ids2 a,b,c` give it its own list and `--ef volume2 1` unmutes it. Each player holds two decoders, so two players need four. On a TV with two hardware decoders, each player then switches to hard cuts, or with `--ez fallback true` the rest decode in software, which is why `split_720p` exists.
 - `--ez uhd false` leaves out videos larger than 1920x1080 (the two 4K clips), for devices that only decode Full HD. `--ez uhd true` keeps them. Without the extra, the app keeps them only if the display has a mode above 1920x1080. Images and broken assets are never left out, so `broken_hevc_4320p` still tests a clip the decoder can't take.
 - `--es fit cover` frames every video and image with that fit (`contain`, `cover`, `stretch` or `original`), and `--es background 202020` colours the bars around them. Assets in `samples.json` can set their own `fit` and `background` too.
+- `--es server http://host:port/` fetches every bundled sample from an HTTP server serving the samples folder, instead of from the APK, and `--es header "'Name: value'"` sends that header with every asset's requests (the inner quotes keep the device shell from splitting it). With the server on the computer, `adb reverse tcp:8000 tcp:8000` lets the device reach it as `http://127.0.0.1:8000/`. The `network` playlist has one of each kind of request.
 - `--ez scripts false` drops every page's script and readiness wait, to compare a page with and without them.
 - `--es sync leader` or `--es sync <leader address>` plays in step with other devices on the LAN; see [Synced playback](#synced-playback).
 
@@ -49,6 +50,7 @@ With no extra, the app plays `mixed`. The playlist in use, and whether 4K is on,
 | `images` | Every image format and size |
 | `mixed` | Video, image and web page in turn, including the 8000x6000 JPEG and the transparent PNG |
 | `portrait` | A 1080x1920 clip and image |
+| `network` | An HLS stream, an image, a page and an MP4: with `--es server` and `--es header`, one of each kind of request |
 | `viewport` | A page that prints the size it was laid out at, first at the player's own size, then laid out at 1920x1080 and scaled to fit |
 | `animated` | Looping GIF, the same GIF played 3 times, animated WebP and SVG, with a clip and a still between them |
 | `split_720p` | H.264, HEVC and VP9 at 720p, for two players side by side (`--ei players 2`) |
@@ -82,6 +84,7 @@ All are 6 seconds unless noted, with a keyframe every second.
 | `vp9_1080p30` | VP9 Profile 0, 1920x1080, 30 fps | Opus 48 kHz | WebM |
 | `av1_1080p30` | AV1 Main, 1920x1080, 30 fps | AAC 48 kHz | MP4 |
 | `short_a_1s`, `short_b_1s` | H.264 High, 1920x1080, 30 fps, 1 second | AAC 48 kHz | MP4 |
+| `hls_h264_1080p30` | `h264_1080p30` remuxed into an HLS stream of three 2-second segments | AAC 48 kHz | HLS (MPEG-TS) |
 
 AV1 needs a hardware decoder or Media3's AV1 extension. On a device without one, `av1_1080p30` fails like the broken assets do.
 

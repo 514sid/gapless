@@ -20,13 +20,17 @@ import androidx.media3.common.VideoSize
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.DefaultRenderersFactory
+import androidx.media3.datasource.DefaultDataSource
+import androidx.media3.datasource.ResolvingDataSource
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import io.github._514sid.gapless.GaplessVideoConfig
 import io.github._514sid.gapless.internal.ContentSize
 import io.github._514sid.gapless.internal.Framing
 import io.github._514sid.gapless.internal.PlaybackItem
 import java.util.UUID
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicReferenceArray
 
 /**
  * A/B video engine backed by two [ExoPlayer]s, one per slot. The next clip is staged and rendered
@@ -52,9 +56,15 @@ import java.util.concurrent.atomic.AtomicBoolean
 internal class DualVideoStateMachine(
     private val context: Context,
     private val config: GaplessVideoConfig = GaplessVideoConfig(),
-    /** Creates each slot's player; tests substitute a scripted one. */
-    private val createExoPlayer: (Context, GaplessVideoConfig) -> ExoPlayer = ::defaultExoPlayer,
+    /**
+     * Creates each slot's player; tests substitute a scripted one. The last argument gives the
+     * headers to send with every request the player makes, read as each request is opened.
+     */
+    private val createExoPlayer: (Context, GaplessVideoConfig, () -> Map<String, String>) -> ExoPlayer = ::defaultExoPlayer,
 ) {
+
+    /** Per slot: the request headers of the clip loaded there. Read on the loading threads. */
+    private val requestHeaders = AtomicReferenceArray(arrayOf<Map<String, String>>(emptyMap(), emptyMap()))
 
     private val handler = Handler(Looper.getMainLooper())
 
@@ -259,6 +269,7 @@ internal class DualVideoStateMachine(
             setFraming(slot, item.framing)
         }
 
+        requestHeaders.set(slot, item.requestHeaders)
         val p = players[slot]
         p.volume = 0f
         p.setPlaybackSpeed(1f)
@@ -360,6 +371,7 @@ internal class DualVideoStateMachine(
     private fun clearSlot(slot: Int, keepFrame: Boolean) {
         slotGeneration[slot]++
         items[slot] = null
+        requestHeaders.set(slot, emptyMap())
         deferred[slot] = false
         retryCount[slot] = 0
         watchFrames[slot].set(false)
@@ -684,7 +696,7 @@ internal class DualVideoStateMachine(
     }
 
     private fun buildPlayer(slot: Int): ExoPlayer =
-        createExoPlayer(context, config)
+        createExoPlayer(context, config) { requestHeaders.get(slot) }
             .apply {
                 videoScalingMode = C.VIDEO_SCALING_MODE_SCALE_TO_FIT
                 repeatMode = Player.REPEAT_MODE_OFF
@@ -721,8 +733,22 @@ internal class DualVideoStateMachine(
 }
 
 @OptIn(UnstableApi::class)
-private fun defaultExoPlayer(context: Context, config: GaplessVideoConfig): ExoPlayer =
+private fun defaultExoPlayer(
+    context: Context,
+    config: GaplessVideoConfig,
+    requestHeaders: () -> Map<String, String>,
+): ExoPlayer =
     ExoPlayer.Builder(context)
+        // Every request the player makes, a progressive file or an HLS or DASH manifest, segment
+        // or key, carries the headers of the clip it is loading. Local files ignore them.
+        .setMediaSourceFactory(
+            DefaultMediaSourceFactory(
+                ResolvingDataSource.Factory(DefaultDataSource.Factory(context)) { dataSpec ->
+                    val headers = requestHeaders()
+                    if (headers.isEmpty()) dataSpec else dataSpec.withAdditionalHeaders(headers)
+                }
+            )
+        )
         .setRenderersFactory(
             DefaultRenderersFactory(context).setEnableDecoderFallback(config.enableDecoderFallback)
         )
