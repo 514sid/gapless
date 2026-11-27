@@ -14,7 +14,8 @@ internal sealed class PlaybackItem {
      */
     data class Video(
         val uri: String,
-        val mimeType: String,
+        /** Null lets ExoPlayer work the format out from the URI and the content. */
+        val mimeType: String? = null,
         val sizeHint: ContentSize? = null,
         val volume: Float = 0f,
         val durationMs: Long? = null,
@@ -28,8 +29,6 @@ internal sealed class PlaybackItem {
 
     data class Image(
         val model: Any,
-        val width: Int,
-        val height: Int,
         val framing: Framing = Framing(),
         /** How many times an animated image plays; null loops it until it is cut away from. */
         val animationLoops: Int? = null,

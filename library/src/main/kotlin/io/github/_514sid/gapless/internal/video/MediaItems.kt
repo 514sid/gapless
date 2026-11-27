@@ -7,14 +7,14 @@ import androidx.media3.common.VideoSize
 import io.github._514sid.gapless.internal.PlaybackItem
 
 /**
- * Builds the [MediaItem] for a video item. The MIME type is passed through so adaptive streams
- * (HLS, DASH, SmoothStreaming, RTSP) are routed to the right media source even when the URL has
- * no telling extension.
+ * Builds the [MediaItem] for a video item. A MIME type, when given, is passed through so adaptive
+ * streams (HLS, DASH, SmoothStreaming, RTSP) are routed to the right media source even when the
+ * URL has no telling extension.
  */
 internal fun buildMediaItem(item: PlaybackItem.Video): MediaItem =
     MediaItem.Builder()
         .setUri(item.uri)
-        .setMimeType(normalizeMimeType(item.mimeType))
+        .apply { item.mimeType?.let { setMimeType(normalizeMimeType(it)) } }
         .apply {
             val clipMs = item.durationMs
             if (clipMs != null && clipMs > 0L) {

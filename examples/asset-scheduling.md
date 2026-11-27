@@ -31,23 +31,23 @@ Define your full asset catalogue with rules:
 ```kotlin
 val catalogue = listOf(
     ScheduledAsset(
-        asset = GaplessAsset(id = "promo-weekday", uri = "...", mimeType = "video/mp4"),
+        asset = GaplessAsset.Video(id = "promo-weekday", uri = "..."),
         daysOfWeek = setOf(Calendar.MONDAY, Calendar.TUESDAY, Calendar.WEDNESDAY, Calendar.THURSDAY, Calendar.FRIDAY),
         durationMs = 15_000,
     ),
     ScheduledAsset(
-        asset = GaplessAsset(id = "promo-weekend", uri = "...", mimeType = "video/mp4"),
+        asset = GaplessAsset.Video(id = "promo-weekend", uri = "..."),
         daysOfWeek = setOf(Calendar.SATURDAY, Calendar.SUNDAY),
         durationMs = 15_000,
     ),
     ScheduledAsset(
-        asset = GaplessAsset(id = "lunch-offer", uri = "...", mimeType = "image/jpeg"),
+        asset = GaplessAsset.Image(id = "lunch-offer", uri = "..."),
         startHour = 11,
         endHour = 14,
         durationMs = 8_000,
     ),
     ScheduledAsset(
-        asset = GaplessAsset(id = "always-on-brand", uri = "...", mimeType = "image/png"),
+        asset = GaplessAsset.Image(id = "always-on-brand", uri = "..."),
         durationMs = 5_000,
     ),
 )

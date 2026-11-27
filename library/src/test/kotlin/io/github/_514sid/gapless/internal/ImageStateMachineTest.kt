@@ -18,8 +18,7 @@ import org.junit.jupiter.api.Test
 class ImageStateMachineTest {
     private lateinit var machine: ImageStateMachine
 
-    private fun imageItem(model: Any = "image.jpg", width: Int = 1920, height: Int = 1080) =
-        PlaybackItem.Image(model, width, height)
+    private fun imageItem(model: Any = "image.jpg") = PlaybackItem.Image(model)
 
     @BeforeEach
     fun setup() {
@@ -42,7 +41,7 @@ class ImageStateMachineTest {
 
     @Test
     fun `prepare stages item in slot B when activeSlot is 0`() {
-        val item = imageItem("photo.jpg", 1920, 1080)
+        val item = imageItem("photo.jpg")
         machine.prepare(item)
 
         val state = machine.renderState
@@ -55,7 +54,7 @@ class ImageStateMachineTest {
     @Test
     fun `prepare stages item in slot A when activeSlot is 1`() {
         machine.play(imageItem("first.jpg"))  // moves activeSlot to 1
-        val item = imageItem("second.jpg", 1280, 720)
+        val item = imageItem("second.jpg")
         machine.prepare(item)
 
         val state = machine.renderState
@@ -87,7 +86,7 @@ class ImageStateMachineTest {
 
     @Test
     fun `play with matching pending item preserves the prepared slot content`() {
-        val item = imageItem("photo.jpg", 1920, 1080)
+        val item = imageItem("photo.jpg")
         machine.prepare(item)
         machine.play(item)
 
@@ -99,7 +98,7 @@ class ImageStateMachineTest {
 
     @Test
     fun `play without prepare stages item and activates it`() {
-        val item = imageItem("direct.jpg", 1920, 1080)
+        val item = imageItem("direct.jpg")
         machine.play(item)
 
         val state = machine.renderState
@@ -449,7 +448,7 @@ class ImageStateMachineTest {
     @Test
     fun `slots carry the image's framing`() {
         val cover = Framing(GaplessFit.Cover, 0xFF123456.toInt())
-        val item = PlaybackItem.Image("photo.jpg", 1920, 1080, cover)
+        val item = PlaybackItem.Image("photo.jpg", cover)
         machine.prepare(item)
         assertEquals(cover, machine.renderState.slotB?.framing)
         machine.play(item)
@@ -470,7 +469,7 @@ class ImageStateMachineTest {
         )
         machine.updateContainerSize(1920, 1080)
         val decoded = GaplessFit.entries.map { fit ->
-            machine.prepare(PlaybackItem.Image("$fit.jpg", 1920, 1080, Framing(fit)))
+            machine.prepare(PlaybackItem.Image("$fit.jpg", Framing(fit)))
             fits.receive()
         }
         assertEquals(GaplessFit.entries, decoded)
@@ -482,7 +481,7 @@ class ImageStateMachineTest {
     fun `an animation that ran its loops on screen is reported once`() {
         val completed = mutableListOf<java.util.UUID>()
         machine.onCompleted = { completed += it }
-        val gif = PlaybackItem.Image("a.gif", 480, 270, animationLoops = 2)
+        val gif = PlaybackItem.Image("a.gif", animationLoops = 2)
         machine.prepare(gif)
         val staged = machine.renderState.slotB!!
         assertEquals(2, staged.animationLoops)
@@ -501,7 +500,7 @@ class ImageStateMachineTest {
     fun `an animation cut away from doesn't report`() {
         val completed = mutableListOf<java.util.UUID>()
         machine.onCompleted = { completed += it }
-        val gif = PlaybackItem.Image("a.gif", 480, 270, animationLoops = 1)
+        val gif = PlaybackItem.Image("a.gif", animationLoops = 1)
         machine.play(gif)
         val old = machine.renderState.slotB!!
         machine.play(imageItem("next.jpg"))
@@ -520,7 +519,7 @@ class ImageStateMachineTest {
             loadImage = { item, _, _ -> loaded.complete(item.requestHeaders) },
         )
         machine.updateContainerSize(1920, 1080)
-        val item = PlaybackItem.Image("https://example.com/a.jpg", 1920, 1080, requestHeaders = headers)
+        val item = PlaybackItem.Image("https://example.com/a.jpg", requestHeaders = headers)
         machine.prepare(item)
         assertEquals(headers, loaded.await())
         assertEquals(headers, machine.renderState.slotB?.requestHeaders)

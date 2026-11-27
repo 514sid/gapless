@@ -5,45 +5,52 @@ import io.github._514sid.gapless.GaplessAsset
 import io.github._514sid.gapless.GaplessFit
 import org.json.JSONObject
 
+/** An asset and how long the sample app shows it. */
+data class SampleItem(val asset: GaplessAsset, val durationMs: Long) {
+    /** The item with a video's volume set to [volume]; other assets have none. */
+    fun withVolume(volume: Float): SampleItem =
+        if (asset is GaplessAsset.Video) copy(asset = asset.copy(volume = volume)) else this
+}
+
 /**
  * The generated test media in assets/samples, described by samples.json. See samples/README.md
  * for what each asset and playlist is for.
  */
 class SampleManifest(
-    private val assets: Map<String, GaplessAsset>,
+    private val items: Map<String, SampleItem>,
     private val broken: Set<String>,
     val playlists: Map<String, List<String>>,
 ) {
 
     /**
-     * The assets of [name] in play order, or null if there is no such playlist. Without [allowUhd],
+     * The items of [name] in play order, or null if there is no such playlist. Without [allowUhd],
      * working videos larger than Full HD are left out; images and broken assets stay in.
      */
-    fun playlist(name: String, volume: Float, allowUhd: Boolean): List<GaplessAsset>? =
-        playlists[name]?.let { assets(it, volume, allowUhd) }
+    fun playlist(name: String, volume: Float, allowUhd: Boolean): List<SampleItem>? =
+        playlists[name]?.let { items(it, volume, allowUhd) }
 
-    /** The named assets in order, or null if any id is unknown. */
-    fun assets(ids: List<String>, volume: Float, allowUhd: Boolean): List<GaplessAsset>? =
-        ids.takeIf { it.all(assets::containsKey) }
-            ?.map { id -> assets.getValue(id) }
-            ?.filter { allowUhd || it.id in broken || !it.isUhdVideo() }
-            ?.map { it.copy(volume = volume) }
+    /** The named items in order, or null if any id is unknown. */
+    fun items(ids: List<String>, volume: Float, allowUhd: Boolean): List<SampleItem>? =
+        ids.takeIf { it.all(items::containsKey) }
+            ?.map { id -> items.getValue(id) }
+            ?.filter { allowUhd || it.asset.id in broken || !it.asset.isUhdVideo() }
+            ?.map { it.withVolume(volume) }
 
     /** The same media with every page script and readiness wait removed, for comparison. */
-    fun withoutScripts(): SampleManifest = SampleManifest(
-        assets.mapValues { (_, a) -> a.copy(javaScript = null, waitForPageReady = false) },
-        broken,
-        playlists,
-    )
+    fun withoutScripts(): SampleManifest = mapAssets { a ->
+        if (a is GaplessAsset.Web) a.copy(javaScript = null, waitForPageReady = false) else a
+    }
 
-    /** The same media with every video and image given [fit] and [backgroundColor], where set. */
-    fun framed(fit: GaplessFit?, backgroundColor: Int?): SampleManifest = SampleManifest(
-        assets.mapValues { (_, a) ->
-            a.copy(fit = fit ?: a.fit, backgroundColor = backgroundColor ?: a.backgroundColor)
-        },
-        broken,
-        playlists,
-    )
+    /** The same media with every asset given [fit] and [backgroundColor], where set. */
+    fun framed(fit: GaplessFit?, backgroundColor: Int?): SampleManifest = mapAssets { a ->
+        val f = fit ?: a.fit
+        val bg = backgroundColor ?: a.backgroundColor
+        when (a) {
+            is GaplessAsset.Video -> a.copy(fit = f, backgroundColor = bg)
+            is GaplessAsset.Image -> a.copy(fit = f, backgroundColor = bg)
+            is GaplessAsset.Web -> a.copy(fit = f, backgroundColor = bg)
+        }
+    }
 
     /**
      * The same media fetched from [server], an HTTP server serving the samples folder, instead of
@@ -58,18 +65,25 @@ class SampleManifest(
             require(name.isNotEmpty() && ':' in it) { "Header \"$it\" isn't Name: value" }
             mapOf(name to it.substringAfter(':').trim())
         }.orEmpty()
-        return SampleManifest(
-            assets.mapValues { (_, a) ->
-                val uri = if (base != null && a.uri.startsWith(ASSET_PREFIX)) base + a.uri.removePrefix(ASSET_PREFIX) else a.uri
-                a.copy(uri = uri, requestHeaders = a.requestHeaders + extra)
-            },
-            broken,
-            playlists,
-        )
+        return mapAssets { a ->
+            val uri = if (base != null && a.uri.startsWith(ASSET_PREFIX)) base + a.uri.removePrefix(ASSET_PREFIX) else a.uri
+            val headers = a.requestHeaders + extra
+            when (a) {
+                is GaplessAsset.Video -> a.copy(uri = uri, requestHeaders = headers)
+                is GaplessAsset.Image -> a.copy(uri = uri, requestHeaders = headers)
+                is GaplessAsset.Web -> a.copy(uri = uri, requestHeaders = headers)
+            }
+        }
     }
 
+    private fun mapAssets(transform: (GaplessAsset) -> GaplessAsset) = SampleManifest(
+        items.mapValues { (_, item) -> item.copy(asset = transform(item.asset)) },
+        broken,
+        playlists,
+    )
+
     private fun GaplessAsset.isUhdVideo(): Boolean {
-        if (!mimeType.startsWith("video/")) return false
+        if (this !is GaplessAsset.Video) return false
         val w = width ?: return false
         val h = height ?: return false
         return maxOf(w, h) > 1920 || minOf(w, h) > 1080
@@ -91,6 +105,35 @@ class SampleManifest(
         fun parseColor(hex: String): Int =
             android.graphics.Color.parseColor(if (hex.startsWith("#")) hex else "#$hex")
 
+        private fun parseAsset(id: String, a: JSONObject): GaplessAsset {
+            val uri = a.getString("uri")
+            val mimeType = a.getString("mimeType")
+            val width = a.optInt("width").takeIf { it > 0 }
+            val height = a.optInt("height").takeIf { it > 0 }
+            val fit = a.optString("fit").takeIf { it.isNotEmpty() }?.let(::parseFit) ?: GaplessFit.Contain
+            val background = a.optString("background").takeIf { it.isNotEmpty() }
+                ?.let(::parseColor) ?: 0xFF000000.toInt()
+            return when (GaplessAsset.kindOf(mimeType)) {
+                GaplessAsset.Kind.Video -> GaplessAsset.Video(
+                    id, uri, mimeType = mimeType, width = width, height = height,
+                    // Clipped to its slot, so a longer clip ends where the slot does.
+                    durationMs = a.getLong("durationMs"),
+                    fit = fit, backgroundColor = background,
+                )
+                GaplessAsset.Kind.Image -> GaplessAsset.Image(
+                    id, uri, animationLoops = a.optInt("animationLoops").takeIf { it > 0 },
+                    fit = fit, backgroundColor = background,
+                )
+                GaplessAsset.Kind.Web -> GaplessAsset.Web(
+                    id, uri, viewportWidth = width, viewportHeight = height,
+                    javaScript = a.optString("javaScript").takeIf { it.isNotEmpty() },
+                    waitForPageReady = a.optBoolean("waitForPageReady"),
+                    fit = fit, backgroundColor = background,
+                )
+                null -> throw IllegalArgumentException("Sample \"$id\" has unsupported mimeType \"$mimeType\"")
+            }
+        }
+
         fun load(context: Context): SampleManifest {
             val json = JSONObject(context.assets.open(PATH).bufferedReader().use { it.readText() })
             val list = json.getJSONArray("assets")
@@ -99,20 +142,7 @@ class SampleManifest(
                 val a = list.getJSONObject(i)
                 val id = a.getString("id")
                 if (a.optBoolean("broken")) broken += id
-                id to GaplessAsset(
-                    id = id,
-                    uri = a.getString("uri"),
-                    mimeType = a.getString("mimeType"),
-                    width = a.optInt("width").takeIf { it > 0 },
-                    height = a.optInt("height").takeIf { it > 0 },
-                    durationMs = a.getLong("durationMs"),
-                    javaScript = a.optString("javaScript").takeIf { it.isNotEmpty() },
-                    waitForPageReady = a.optBoolean("waitForPageReady"),
-                    fit = a.optString("fit").takeIf { it.isNotEmpty() }?.let(::parseFit) ?: GaplessFit.Contain,
-                    backgroundColor = a.optString("background").takeIf { it.isNotEmpty() }
-                        ?.let(::parseColor) ?: 0xFF000000.toInt(),
-                    animationLoops = a.optInt("animationLoops").takeIf { it > 0 },
-                )
+                id to SampleItem(parseAsset(id, a), a.getLong("durationMs"))
             }
             val lists = json.getJSONObject("playlists")
             val playlists = lists.keys().asSequence().associateWith { name ->

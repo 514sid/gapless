@@ -20,8 +20,8 @@ val schedules = listOf(
         startHour = 6,
         endHour = 12,
         assets = listOf(
-            GaplessAsset(id = "morning-1", uri = "...", mimeType = "video/mp4") to 15_000L,
-            GaplessAsset(id = "morning-2", uri = "...", mimeType = "image/jpeg") to 8_000L,
+            GaplessAsset.Video(id = "morning-1", uri = "...") to 15_000L,
+            GaplessAsset.Image(id = "morning-2", uri = "...") to 8_000L,
         )
     ),
     ScheduledPlaylist(
@@ -29,7 +29,7 @@ val schedules = listOf(
         startHour = 12,
         endHour = 18,
         assets = listOf(
-            GaplessAsset(id = "afternoon-1", uri = "...", mimeType = "video/mp4") to 20_000L,
+            GaplessAsset.Video(id = "afternoon-1", uri = "...") to 20_000L,
         )
     ),
     ScheduledPlaylist(
@@ -37,7 +37,7 @@ val schedules = listOf(
         startHour = 18,
         endHour = 24,
         assets = listOf(
-            GaplessAsset(id = "evening-1", uri = "...", mimeType = "video/mp4") to 12_000L,
+            GaplessAsset.Video(id = "evening-1", uri = "...") to 12_000L,
         )
     ),
     ScheduledPlaylist(
@@ -45,7 +45,7 @@ val schedules = listOf(
         startHour = 0,
         endHour = 6,
         assets = listOf(
-            GaplessAsset(id = "overnight-1", uri = "...", mimeType = "image/png") to 30_000L,
+            GaplessAsset.Image(id = "overnight-1", uri = "...") to 30_000L,
         )
     ),
 )

@@ -26,7 +26,7 @@ public sealed class GaplessEvent {
     /**
      * A video played to its end: a clip reached its last frame, or a stream finished (video on
      * demand, or a live stream the server marked as ended). Also an animated image that played
-     * its [GaplessAsset.animationLoops]. The last frame stays on screen until the next
+     * its [GaplessAsset.Image.animationLoops]. The last frame stays on screen until the next
      * [GaplessController.play], and [Ended] still follows when something replaces it.
      *
      * Use it to move on as soon as a clip or stream is done, when its length is unknown or shorter

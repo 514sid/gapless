@@ -128,8 +128,9 @@ public class GaplessController(
     /**
      * Begins playback with [asset]: buffers it for [preloadMs], then shows it.
      *
-     * @throws IllegalArgumentException if [asset] fails validation (blank id or uri, unsupported
-     * mimeType, volume outside 0..1, non-positive durationMs, refreshIntervalMs or animationLoops, malformed requestHeaders).
+     * @throws IllegalArgumentException if [asset] fails validation (blank id or uri, malformed
+     * requestHeaders, a video mimeType that isn't a video type, volume outside 0..1, non-positive
+     * durationMs, refreshIntervalMs or animationLoops, empty javaScriptOrigins).
      */
     public fun start(asset: GaplessAsset) {
         validateAsset(asset)
@@ -139,8 +140,9 @@ public class GaplessController(
     /**
      * Starts buffering [asset] so a later [play] of it can cut immediately.
      *
-     * @throws IllegalArgumentException if [asset] fails validation (blank id or uri, unsupported
-     * mimeType, volume outside 0..1, non-positive durationMs, refreshIntervalMs or animationLoops, malformed requestHeaders).
+     * @throws IllegalArgumentException if [asset] fails validation (blank id or uri, malformed
+     * requestHeaders, a video mimeType that isn't a video type, volume outside 0..1, non-positive
+     * durationMs, refreshIntervalMs or animationLoops, empty javaScriptOrigins).
      */
     public fun prepareNext(asset: GaplessAsset) {
         validateAsset(asset)
@@ -155,8 +157,9 @@ public class GaplessController(
      * on screen, in [GaplessEvent.PreloadError] if it fails to load, in which case nothing changes
      * on screen, or in [GaplessEvent.PlaybackError] if it fails after the cut but before it shows.
      *
-     * @throws IllegalArgumentException if [asset] fails validation (blank id or uri, unsupported
-     * mimeType, volume outside 0..1, non-positive durationMs, refreshIntervalMs or animationLoops, malformed requestHeaders).
+     * @throws IllegalArgumentException if [asset] fails validation (blank id or uri, malformed
+     * requestHeaders, a video mimeType that isn't a video type, volume outside 0..1, non-positive
+     * durationMs, refreshIntervalMs or animationLoops, empty javaScriptOrigins).
      */
     public fun play(asset: GaplessAsset) {
         validateAsset(asset)
@@ -175,8 +178,9 @@ public class GaplessController(
      * a second, so a 60 fps clip is only ever slowed down, and a clip that stalls while sped up
      * isn't sped up again. This is how devices sharing a clock stay in step. Ignored for images and
      * web pages, which have no timeline of their own: call [play] at the moment they should appear.
-     * @throws IllegalArgumentException if [asset] fails validation (blank id or uri, unsupported
-     * mimeType, volume outside 0..1, non-positive durationMs, refreshIntervalMs or animationLoops, malformed requestHeaders).
+     * @throws IllegalArgumentException if [asset] fails validation (blank id or uri, malformed
+     * requestHeaders, a video mimeType that isn't a video type, volume outside 0..1, non-positive
+     * durationMs, refreshIntervalMs or animationLoops, empty javaScriptOrigins).
      */
     @ExperimentalGaplessApi
     public fun play(asset: GaplessAsset, startAtMs: Long) {
@@ -432,58 +436,68 @@ public class GaplessController(
     }
 
     private fun validateAsset(asset: GaplessAsset) {
-        require(asset.id.isNotBlank()) { "Asset with uri \"${asset.uri}\" has a blank id" }
-        require(asset.uri.isNotBlank()) { "Asset \"${asset.id}\" has a blank uri" }
-        require(asset.isVideo || asset.isImage || asset.isWeb) {
-            "Asset \"${asset.id}\" has unsupported mimeType \"${asset.mimeType}\""
-        }
-        require(asset.volume in 0f..1f) { "Asset \"${asset.id}\" volume ${asset.volume} is outside 0.0..1.0" }
-        asset.durationMs?.let { require(it > 0) { "Asset \"${asset.id}\" durationMs must be positive" } }
-        asset.refreshIntervalMs?.let { require(it > 0) { "Asset \"${asset.id}\" refreshIntervalMs must be positive" } }
-        asset.animationLoops?.let { require(it > 0) { "Asset \"${asset.id}\" animationLoops must be positive" } }
+        val id = asset.id
+        require(id.isNotBlank()) { "Asset with uri \"${asset.uri}\" has a blank id" }
+        require(asset.uri.isNotBlank()) { "Asset \"$id\" has a blank uri" }
         for ((name, value) in asset.requestHeaders) {
             // A line break would let a value add headers or a body of its own to the request.
             require(name.isNotBlank() && name.none { it.isWhitespace() || it == ':' }) {
-                "Asset \"${asset.id}\" has an invalid request header name \"$name\""
+                "Asset \"$id\" has an invalid request header name \"$name\""
             }
             require(value.none { it == '\r' || it == '\n' }) {
-                "Asset \"${asset.id}\" request header \"$name\" has a line break in its value"
+                "Asset \"$id\" request header \"$name\" has a line break in its value"
             }
         }
-        asset.javaScriptOrigins?.let { origins ->
-            require(origins.isNotEmpty() && origins.none { it.isBlank() }) {
-                "Asset \"${asset.id}\" javaScriptOrigins must name at least one origin, or be null"
+        when (asset) {
+            is GaplessAsset.Video -> {
+                asset.mimeType?.let { mimeType ->
+                    require(GaplessAsset.kindOf(mimeType) == GaplessAsset.Kind.Video) {
+                        "Video \"$id\" has mimeType \"$mimeType\", which isn't a video or stream type"
+                    }
+                }
+                require(asset.volume in 0f..1f) { "Video \"$id\" volume ${asset.volume} is outside 0.0..1.0" }
+                asset.durationMs?.let { require(it > 0) { "Video \"$id\" durationMs must be positive" } }
+            }
+            is GaplessAsset.Image -> {
+                asset.animationLoops?.let { require(it > 0) { "Image \"$id\" animationLoops must be positive" } }
+            }
+            is GaplessAsset.Web -> {
+                asset.refreshIntervalMs?.let { require(it > 0) { "Web page \"$id\" refreshIntervalMs must be positive" } }
+                asset.javaScriptOrigins?.let { origins ->
+                    require(origins.isNotEmpty() && origins.none { it.isBlank() }) {
+                        "Web page \"$id\" javaScriptOrigins must name at least one origin, or be null"
+                    }
+                }
             }
         }
     }
 
     private fun toPlaybackItem(g: GaplessAsset): PlaybackItem {
-        val item = when {
-            g.isVideo -> PlaybackItem.Video(
+        val framing = Framing(g.fit, g.backgroundColor)
+        val item = when (g) {
+            is GaplessAsset.Video -> PlaybackItem.Video(
                 uri = g.uri,
                 mimeType = g.mimeType,
                 sizeHint = ContentSize.of(g.width, g.height),
                 volume = g.volume,
                 durationMs = g.durationMs,
-                framing = Framing(g.fit, g.backgroundColor),
+                framing = framing,
                 requestHeaders = g.requestHeaders,
             )
-            g.isImage -> PlaybackItem.Image(
+            is GaplessAsset.Image -> PlaybackItem.Image(
                 model = g.uri,
-                width = g.width ?: 1920,
-                height = g.height ?: 1080,
-                framing = Framing(g.fit, g.backgroundColor),
+                framing = framing,
                 animationLoops = g.animationLoops,
                 requestHeaders = g.requestHeaders,
             )
-            else -> PlaybackItem.Web(
+            is GaplessAsset.Web -> PlaybackItem.Web(
                 url = g.uri,
                 refreshIntervalMs = g.refreshIntervalMs ?: 0L,
                 javaScript = g.javaScript?.takeIf { it.isNotBlank() },
                 javaScriptOrigins = g.javaScriptOrigins ?: defaultScriptOrigins(g.uri),
                 waitForReady = g.waitForPageReady,
-                viewport = ContentSize.of(g.width, g.height),
-                framing = Framing(g.fit, g.backgroundColor),
+                viewport = ContentSize.of(g.viewportWidth, g.viewportHeight),
+                framing = framing,
                 requestHeaders = g.requestHeaders,
             )
         }

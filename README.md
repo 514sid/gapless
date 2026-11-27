@@ -42,8 +42,8 @@ class MainActivity : ComponentActivity() {
         data class Asset(val spec: GaplessAsset, val durationMs: Long)
 
         val assets = listOf(
-            Asset(GaplessAsset(id = "promo-video", uri = "https://example.com/promo.mp4", mimeType = "video/mp4"), 15_000L),
-            Asset(GaplessAsset(id = "poster",      uri = "https://example.com/poster.jpg", mimeType = "image/jpeg"), 8_000L),
+            Asset(GaplessAsset.Video(id = "promo-video", uri = "https://example.com/promo.mp4"), 15_000L),
+            Asset(GaplessAsset.Image(id = "poster",      uri = "https://example.com/poster.jpg"), 8_000L),
         )
 
         var index = 0
@@ -182,38 +182,66 @@ val webConfig = remember {
 
 ### `GaplessAsset`
 
+An asset is a `GaplessAsset.Video`, a `GaplessAsset.Image` or a `GaplessAsset.Web` page. Each has only the
+fields that apply to it. All three share these:
+
 ```kotlin
-GaplessAsset(
-    id       = "unique-id",  // stable across list updates
-    uri      = "https://...", // local path, content://, or remote URL
-    mimeType = "video/mp4",  // determines the renderer
-    width    = 1920,         // optional, used for aspect ratio before first frame
-    height   = 1080,
-    volume   = 0f,           // video only: 0.0 (silent) to 1.0 (full)
+id              = "unique-id",          // stable across list updates
+uri             = "https://...",        // local path, content://, or remote URL
+fit             = GaplessFit.Contain,   // Contain (default), Cover, Stretch or Original
+backgroundColor = 0xFF000000.toInt(),   // ARGB colour of the bars around content that doesn't fill the player
+requestHeaders  = mapOf("Authorization" to "Bearer ..."), // sent with the asset's requests
+```
 
-    // Videos and images
-    fit = GaplessFit.Contain,             // Contain (default), Cover, Stretch or Original
-    backgroundColor = 0xFF000000.toInt(), // ARGB colour of the bars around contained content
+The rest belong to one type:
 
-    // Animated images only
-    animationLoops = 3,      // optional; play 3 times, hold the last frame, emit Completed
+```kotlin
+GaplessAsset.Video(
+    id = "promo", uri = "https://example.com/promo.m3u8",
+    mimeType   = "application/x-mpegURL", // optional; only for a stream whose URL doesn't show its type
+    width      = 1920,                    // optional; sizes the slot before the first frame decodes
+    height     = 1080,
+    volume     = 0f,                      // 0.0 (silent, the default) to 1.0 (full)
+    durationMs = 10_000,                  // optional; clip the video so the next one can preload early
+)
 
-    // Any asset
-    requestHeaders = mapOf("Authorization" to "Bearer ..."), // sent with the asset's requests
+GaplessAsset.Image(
+    id = "poster", uri = "https://example.com/poster.gif",
+    animationLoops = 3,                   // optional; play 3 times, hold the last frame, emit Completed
+)
 
-    // Video only
-    durationMs = 10_000,     // optional; clip the video so the next one can preload early
-
-    // Web assets only
-    refreshIntervalMs = 60_000
-    // width and height on a web page: the CSS pixel size it is laid out at, then fitted
+GaplessAsset.Web(
+    id = "board", uri = "https://example.com/board",
+    viewportWidth     = 1920,             // optional; the CSS pixel size the page is laid out at
+    viewportHeight    = 1080,
+    refreshIntervalMs = 60_000,           // optional; reload every minute
+    javaScript        = "...",            // optional; runs before the page's own scripts
+    javaScriptOrigins = null,             // optional; where javaScript may run
+    waitForPageReady  = false,            // show the page when it calls gapless.ready()
 )
 ```
 
-`mimeType` picks the renderer: `video/*` and HLS, DASH, SmoothStreaming or RTSP stream types play in
-ExoPlayer, `image/*` in Coil, and `text/html` or `application/xhtml+xml` in a WebView. Matching ignores case
-and parameters. Any other type, an out-of-range `volume`, or a non-positive `durationMs`, `refreshIntervalMs` or `animationLoops`
-makes `start`, `prepareNext` and `play` throw `IllegalArgumentException`.
+A video's `mimeType` is optional. ExoPlayer recognises `.m3u8`, `.mpd` and `.ism` URLs and `rtsp://` by
+themselves, and works out a file's format from its content, so it's only needed for a stream at a URL that
+doesn't say what it is. When set, it must be a `video/*` type or an HLS, DASH, SmoothStreaming or RTSP stream
+type.
+
+If your content source gives you MIME types, `GaplessAsset.kindOf(mimeType)` says which type plays it:
+`Kind.Video` for `video/*` and stream types, `Kind.Image` for `image/*`, `Kind.Web` for `text/html` and
+`application/xhtml+xml`, or null for anything else. It ignores case and parameters such as `; charset=utf-8`.
+
+```kotlin
+val asset = when (GaplessAsset.kindOf(item.mimeType)) {
+    GaplessAsset.Kind.Video -> GaplessAsset.Video(item.id, item.url, mimeType = item.mimeType)
+    GaplessAsset.Kind.Image -> GaplessAsset.Image(item.id, item.url)
+    GaplessAsset.Kind.Web -> GaplessAsset.Web(item.id, item.url, refreshIntervalMs = 60_000)
+    null -> return // not something the player shows
+}
+```
+
+A blank `id` or `uri`, malformed `requestHeaders`, a video `mimeType` that isn't a video type, an
+out-of-range `volume`, a non-positive `durationMs`, `refreshIntervalMs` or `animationLoops`, or an empty
+`javaScriptOrigins` makes `start`, `prepareNext` and `play` throw `IllegalArgumentException`.
 
 **`durationMs` (video only).** Without it, a clip plays its full natural length and ExoPlayer only begins
 buffering the next clip in the final `maxBufferMs` window, so a long clip can transition with a rebuffer.
@@ -231,7 +259,7 @@ GaplessPlayer(
 The host still drives the transition with `play()`. If a clip reaches its `durationMs` end before then, it holds
 on the last frame and never auto-advances. Leave `durationMs` null for live streams (HLS/DASH/RTSP).
 
-**`fit` and `backgroundColor` (videos and images).** Content rarely has the screen's exact shape. `fit`
+**`fit` and `backgroundColor`.** Content rarely has the screen's exact shape. `fit`
 says what to do about it:
 
 | `fit` | Result |
@@ -245,8 +273,8 @@ says what to do about it:
 of the panel's. Images are decoded whole for it, so keep them no larger than needed.
 
 `backgroundColor` is ARGB and defaults to opaque black. Both fields are per asset, so each item you play brings its own: a white still can sit on
-white bars while the video after it keeps black ones. Web pages follow both fields when they have a `width` and
-`height` (see [Laying a page out at its own size](#laying-a-page-out-at-its-own-size)), and otherwise fill the player.
+white bars while the video after it keeps black ones. Web pages follow both fields when they have a `viewportWidth`
+and `viewportHeight` (see [Laying a page out at its own size](#laying-a-page-out-at-its-own-size)), and otherwise fill the player.
 
 **Animated images and SVG.** GIF, animated WebP and SVG load like any other image. Animated WebP needs
 Android 9 or newer; older versions show its first frame. An animation always starts from its first frame when
@@ -521,9 +549,9 @@ dashboard designed for 1920x1080 wraps, overflows or shows its mobile layout.
 Give the asset the size it was designed for:
 
 ```kotlin
-GaplessAsset(
-    id = "board", uri = "https://example.com/board", mimeType = "text/html",
-    width = 1920, height = 1080, // laid out at 1920x1080 CSS pixels on any screen
+GaplessAsset.Web(
+    id = "board", uri = "https://example.com/board",
+    viewportWidth = 1920, viewportHeight = 1080, // laid out at 1920x1080 CSS pixels on any screen
 )
 ```
 
@@ -536,15 +564,14 @@ width is set when the page first paints, so the page may lay out once at the pla
 
 ### Scripts in the page
 
-`javaScript` on a web asset runs in every document the page loads, before the page's own scripts
+`javaScript` on a `GaplessAsset.Web` runs in every document the page loads, before the page's own scripts
 and before anything is drawn. Styles it adds apply from the first paint, so a hidden cookie
 banner never flashes up. It runs again on each navigation and refresh.
 
 ```kotlin
-GaplessAsset(
+GaplessAsset.Web(
     id = "news",
     uri = "https://news.example.com",
-    mimeType = "text/html",
     javaScript = """
         const style = document.createElement('style');
         style.textContent = '#cookie-banner { display: none !important } ::-webkit-scrollbar { display: none }';
@@ -567,10 +594,9 @@ while its data loads. With `waitForPageReady = true` it is shown when it calls `
 instead. The page can make the call itself, or a `javaScript` can, for example on `load`:
 
 ```kotlin
-GaplessAsset(
+GaplessAsset.Web(
     id = "dashboard",
     uri = "https://dashboard.example.com",
-    mimeType = "text/html",
     waitForPageReady = true,
     javaScript = "window.addEventListener('load', () => gapless.ready())",
 )

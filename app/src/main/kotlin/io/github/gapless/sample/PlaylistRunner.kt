@@ -10,7 +10,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 /**
- * Loops [assets] on its own [controller]: each asset is staged as the previous one starts, and
+ * Loops [items] on its own [controller]: each asset is staged as the previous one starts, and
  * cut to when its slot runs out. Failed assets are skipped after a short pause.
  *
  * @param name Prefixed to every log line, so the players in split-screen mode can be told apart.
@@ -18,8 +18,11 @@ import kotlinx.coroutines.launch
 class PlaylistRunner(
     private val scope: CoroutineScope,
     private val name: String,
-    private val assets: List<GaplessAsset>,
+    private val items: List<SampleItem>,
 ) {
+    private val assets = items.map { it.asset }
+    private val durations = items.associate { it.asset.id to it.durationMs }
+
     val controller = GaplessController(scope = scope, preloadMs = 3_000)
 
     private var index = 0
@@ -51,7 +54,7 @@ class PlaylistRunner(
                 controller.prepareNext(assets[index % assets.size])
                 // Count from when it really started, not from when the event arrived.
                 val elapsed = System.currentTimeMillis() - event.timestamp
-                val duration = event.asset.durationMs ?: return
+                val duration = durations[event.asset.id] ?: return
                 timerJob = scope.launch {
                     delay(duration - elapsed)
                     playNext()

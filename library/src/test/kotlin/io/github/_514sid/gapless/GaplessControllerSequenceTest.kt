@@ -65,7 +65,7 @@ class GaplessControllerSequenceTest {
         fun ended(): List<String> = events.filterIsInstance<GaplessEvent.Ended>().map { it.asset.id }
     }
 
-    private fun video(id: String) = GaplessAsset(id = id, uri = "file:///$id.mp4", mimeType = "video/mp4")
+    private fun video(id: String) = GaplessAsset.Video(id = id, uri = "file:///$id.mp4", mimeType = "video/mp4")
 
     private fun TestScope.settle() {
         advanceTimeBy(preloadMs + readyTimeoutMs + 1)

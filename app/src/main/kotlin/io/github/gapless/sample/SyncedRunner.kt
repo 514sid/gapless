@@ -43,7 +43,7 @@ class SyncedRunner(
     private val sync: ClockSync,
     private val anchor: Boolean = true,
     private val lateMs: Long = 0,
-    private val resolve: (List<String>) -> List<GaplessAsset>?,
+    private val resolve: (List<String>) -> List<SampleItem>?,
 ) {
     val controller = GaplessController(scope = scope, preloadMs = 3_000, clock = GaplessClock { sync.now() })
 
@@ -64,19 +64,20 @@ class SyncedRunner(
         scope.launch {
             sync.session.filterNotNull().collectLatest { session ->
                 while (!sync.isSynced) delay(50)
-                val assets = resolve(session.ids)
-                if (assets.isNullOrEmpty() || assets.any { (it.durationMs ?: 0) <= 0 }) {
+                val items = resolve(session.ids)
+                if (items.isNullOrEmpty() || items.any { it.durationMs <= 0 }) {
                     Log.e(TAG, "Can't play session ${session.ids}: unknown ids or no durations")
                     _status.value = "can't play the leader's playlist"
                     return@collectLatest
                 }
-                play(session, assets)
+                play(session, items)
             }
         }
     }
 
-    private suspend fun play(session: SyncSession, assets: List<GaplessAsset>) {
-        val durations = assets.map { it.durationMs!! }
+    private suspend fun play(session: SyncSession, items: List<SampleItem>) {
+        val assets = items.map { it.asset }
+        val durations = items.map { it.durationMs }
         val loopMs = durations.sum()
         val offsets = durations.runningFold(0L) { acc, d -> acc + d } // start of each slot in a loop
 
