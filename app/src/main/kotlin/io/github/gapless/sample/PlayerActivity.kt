@@ -39,7 +39,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.lifecycleScope
-import io.github._514sid.gapless.GaplessAsset
 import io.github._514sid.gapless.GaplessPlayer
 import io.github._514sid.gapless.GaplessRotation
 import io.github._514sid.gapless.GaplessVideoConfig
@@ -122,7 +121,7 @@ class PlayerActivity : ComponentActivity() {
                 val second = if (intent.hasExtra(EXTRA_IDS2) || intent.hasExtra(EXTRA_PLAYLIST2)) {
                     resolvePlaylist(manifest, EXTRA_IDS2, EXTRA_PLAYLIST2, DEFAULT_PLAYLIST, volume2, allowUhd)
                 } else {
-                    (first.drop(1) + first.take(1)).map { it.copy(volume = volume2) }
+                    (first.drop(1) + first.take(1)).map { it.withVolume(volume2) }
                 }
                 add(PlaylistRunner(lifecycleScope, "right", second))
             }
@@ -192,7 +191,7 @@ class PlayerActivity : ComponentActivity() {
         showClock: Boolean,
     ) {
         val sync = if (role == "leader") {
-            ClockSync.leader(resolvePlaylist(manifest, EXTRA_IDS, EXTRA_PLAYLIST, DEFAULT_PLAYLIST, volume, allowUhd).map { it.id })
+            ClockSync.leader(resolvePlaylist(manifest, EXTRA_IDS, EXTRA_PLAYLIST, DEFAULT_PLAYLIST, volume, allowUhd).map { it.asset.id })
         } else {
             ClockSync.follower(role)
         }
@@ -202,7 +201,7 @@ class PlayerActivity : ComponentActivity() {
             sync,
             anchor = intent.getBooleanExtra(EXTRA_ANCHOR, true),
             lateMs = intent.getIntExtra(EXTRA_LATE_MS, 0).toLong(),
-        ) { ids -> manifest.assets(ids, volume, allowUhd = true) }
+        ) { ids -> manifest.items(ids, volume, allowUhd = true) }
         Log.d(TAG, "Synced playback as ${if (sync.isLeader) "leader" else "follower of $role"}")
         runner.start()
 
@@ -227,11 +226,11 @@ class PlayerActivity : ComponentActivity() {
         default: String,
         volume: Float,
         allowUhd: Boolean,
-    ): List<GaplessAsset> {
+    ): List<SampleItem> {
         val ids = intent.getStringExtra(idsExtra)?.split(',')?.map { it.trim() }?.filter { it.isNotEmpty() }
         if (ids != null) {
-            manifest.assets(ids, volume, allowUhd)?.let {
-                Log.d(TAG, "Playlist $idsExtra: ${it.map { a -> a.id }}")
+            manifest.items(ids, volume, allowUhd)?.let {
+                Log.d(TAG, "Playlist $idsExtra: ${it.map { item -> item.asset.id }}")
                 return it
             }
             Log.e(TAG, "Unknown ids in $ids")
@@ -241,7 +240,7 @@ class PlayerActivity : ComponentActivity() {
             Log.e(TAG, "No playlist \"$name\"; have ${manifest.playlists.keys}")
             manifest.playlist(default, volume, allowUhd)!!
         }
-        Log.d(TAG, "Playlist $name: ${list.map { it.id }}")
+        Log.d(TAG, "Playlist $name: ${list.map { it.asset.id }}")
         return list
     }
 

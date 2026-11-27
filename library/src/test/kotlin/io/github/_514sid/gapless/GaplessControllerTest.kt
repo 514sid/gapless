@@ -70,7 +70,7 @@ class GaplessControllerTest {
     }
 
     private fun video(id: String, width: Int? = null, height: Int? = null) =
-        GaplessAsset(id = id, uri = "file:///$id.mp4", mimeType = "video/mp4", width = width, height = height)
+        GaplessAsset.Video(id = id, uri = "file:///$id.mp4", mimeType = "video/mp4", width = width, height = height)
 
     /**
      * Runs past every timer the controller can set. The controller lives in backgroundScope,
@@ -468,7 +468,7 @@ class GaplessControllerTest {
     fun `web assets keep their refresh interval`() = runTest {
         val h = Harness(this)
         runCurrent()
-        h.controller.start(GaplessAsset("w", "https://example.com", "text/html", refreshIntervalMs = 30_000))
+        h.controller.start(GaplessAsset.Web("w", "https://example.com", refreshIntervalMs = 30_000))
         runCurrent()
 
         val item = h.lastPrepared() as PlaybackItem.Web
@@ -497,7 +497,7 @@ class GaplessControllerTest {
         val white = 0xFFFFFFFF.toInt()
 
         h.controller.prepareNext(video("v").copy(fit = GaplessFit.Cover, backgroundColor = white))
-        h.controller.prepareNext(GaplessAsset("i", "photo.jpg", "image/jpeg", fit = GaplessFit.Original))
+        h.controller.prepareNext(GaplessAsset.Image("i", "photo.jpg", fit = GaplessFit.Original))
         h.controller.prepareNext(video("plain"))
         runCurrent()
 
@@ -513,9 +513,9 @@ class GaplessControllerTest {
         runCurrent()
 
         h.controller.prepareNext(
-            GaplessAsset("board", "https://example.com", "text/html", width = 1920, height = 1080, fit = GaplessFit.Cover),
+            GaplessAsset.Web("board", "https://example.com", viewportWidth = 1920, viewportHeight = 1080, fit = GaplessFit.Cover),
         )
-        h.controller.prepareNext(GaplessAsset("site", "https://example.org", "text/html"))
+        h.controller.prepareNext(GaplessAsset.Web("site", "https://example.org"))
         runCurrent()
 
         val (board, site) = h.prepares.map { it as PlaybackItem.Web }
@@ -531,8 +531,8 @@ class GaplessControllerTest {
         val headers = mapOf("Authorization" to "Bearer abc")
 
         h.controller.prepareNext(video("v").copy(requestHeaders = headers))
-        h.controller.prepareNext(GaplessAsset("i", "https://example.com/a.jpg", "image/jpeg", requestHeaders = headers))
-        h.controller.prepareNext(GaplessAsset("w", "https://example.com", "text/html", requestHeaders = headers))
+        h.controller.prepareNext(GaplessAsset.Image("i", "https://example.com/a.jpg", requestHeaders = headers))
+        h.controller.prepareNext(GaplessAsset.Web("w", "https://example.com", requestHeaders = headers))
         runCurrent()
 
         val (v, i, w) = h.prepares
@@ -546,8 +546,8 @@ class GaplessControllerTest {
         val h = Harness(this)
         runCurrent()
 
-        h.controller.prepareNext(GaplessAsset("g", "a.gif", "image/gif", animationLoops = 3))
-        h.controller.prepareNext(GaplessAsset("s", "b.svg", "image/svg+xml"))
+        h.controller.prepareNext(GaplessAsset.Image("g", "a.gif", animationLoops = 3))
+        h.controller.prepareNext(GaplessAsset.Image("s", "b.svg"))
         runCurrent()
 
         val (gif, svg) = h.prepares.map { it as PlaybackItem.Image }
@@ -561,16 +561,16 @@ class GaplessControllerTest {
     fun `invalid assets are rejected`() = runTest {
         val controller = Harness(this).controller
 
-        assertThrows<IllegalArgumentException> { controller.play(GaplessAsset(" ", "file:///a.mp4", "video/mp4")) }
-        assertThrows<IllegalArgumentException> { controller.play(GaplessAsset("a", "", "video/mp4")) }
-        assertThrows<IllegalArgumentException> { controller.play(GaplessAsset("a", "file:///a.mp3", "audio/mpeg")) }
+        assertThrows<IllegalArgumentException> { controller.play(GaplessAsset.Video(" ", "file:///a.mp4")) }
+        assertThrows<IllegalArgumentException> { controller.play(GaplessAsset.Image("a", "")) }
+        assertThrows<IllegalArgumentException> { controller.play(GaplessAsset.Video("a", "file:///a.mp3", mimeType = "audio/mpeg")) }
         assertThrows<IllegalArgumentException> { controller.play(video("a").copy(volume = 1.5f)) }
         assertThrows<IllegalArgumentException> { controller.play(video("a").copy(durationMs = 0)) }
         assertThrows<IllegalArgumentException> {
-            controller.play(GaplessAsset("w", "https://example.com", "text/html", refreshIntervalMs = -1))
+            controller.play(GaplessAsset.Web("w", "https://example.com", refreshIntervalMs = -1))
         }
         assertThrows<IllegalArgumentException> {
-            controller.play(GaplessAsset("g", "a.gif", "image/gif", animationLoops = 0))
+            controller.play(GaplessAsset.Image("g", "a.gif", animationLoops = 0))
         }
         assertThrows<IllegalArgumentException> {
             controller.play(video("a").copy(requestHeaders = mapOf("Bad Name" to "x")))
@@ -578,5 +578,19 @@ class GaplessControllerTest {
         assertThrows<IllegalArgumentException> {
             controller.play(video("a").copy(requestHeaders = mapOf("X-Token" to "a\r\nX-Evil: 1")))
         }
+        assertThrows<IllegalArgumentException> {
+            controller.play(GaplessAsset.Web("w", "https://example.com", javaScriptOrigins = emptySet()))
+        }
+    }
+
+    @Test
+    fun `a video without a mime type plays with none, for ExoPlayer to work out`() = runTest {
+        val h = Harness(this)
+        runCurrent()
+
+        h.controller.prepareNext(GaplessAsset.Video("v", "https://example.com/live.m3u8"))
+        runCurrent()
+
+        assertNull((h.lastPrepared() as PlaybackItem.Video).mimeType)
     }
 }

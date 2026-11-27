@@ -1,13 +1,12 @@
 package io.github._514sid.gapless
 
-import org.junit.jupiter.api.Assertions.assertFalse
-import org.junit.jupiter.api.Assertions.assertTrue
+import io.github._514sid.gapless.GaplessAsset.Kind
+import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.ValueSource
 
 class GaplessAssetTest {
-
-    private fun asset(mimeType: String) = GaplessAsset(id = "a", uri = "file:///a", mimeType = mimeType)
 
     @ParameterizedTest
     @ValueSource(
@@ -22,28 +21,24 @@ class GaplessAssetTest {
         ]
     )
     fun `video types`(mimeType: String) {
-        val a = asset(mimeType)
-        assertTrue(a.isVideo)
-        assertFalse(a.isImage)
-        assertFalse(a.isWeb)
+        assertEquals(Kind.Video, GaplessAsset.kindOf(mimeType))
     }
 
     @ParameterizedTest
     @ValueSource(strings = ["image/jpeg", "IMAGE/PNG", "image/webp"])
     fun `image types`(mimeType: String) {
-        assertTrue(asset(mimeType).isImage)
+        assertEquals(Kind.Image, GaplessAsset.kindOf(mimeType))
     }
 
     @ParameterizedTest
     @ValueSource(strings = ["text/html", "text/html; charset=utf-8", "TEXT/HTML", "application/xhtml+xml"])
     fun `web types`(mimeType: String) {
-        assertTrue(asset(mimeType).isWeb)
+        assertEquals(Kind.Web, GaplessAsset.kindOf(mimeType))
     }
 
     @ParameterizedTest
     @ValueSource(strings = ["audio/mpeg", "application/pdf", "text/plain", ""])
-    fun `other types match no renderer`(mimeType: String) {
-        val a = asset(mimeType)
-        assertFalse(a.isVideo || a.isImage || a.isWeb)
+    fun `other types match no asset type`(mimeType: String) {
+        assertNull(GaplessAsset.kindOf(mimeType))
     }
 }
